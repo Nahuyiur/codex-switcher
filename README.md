@@ -38,7 +38,10 @@ codex plugin add codex-account-switcher@codex-switcher
 ```bash
 npm install
 npm run build
+npm link
 ```
+
+`npm link` 会让 `codex-account-switcher` 命令进入本机 PATH，Codex App 插件之后就能在任意对话目录中调用它。
 
 VS Code 扩展打包：
 
