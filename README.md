@@ -22,6 +22,24 @@ node dist/src/cli.js refresh-limits --all
 node dist/src/cli.js switch --best
 ```
 
+## Codex App 插件
+
+Codex App 插件是 skill 插件，不是侧边栏 UI。安装后，在 Codex 对话里直接用中文说“列出 Codex 账号”“导入 auth 文件”“切换到余额最多账号”等即可。
+
+安装 marketplace 和插件：
+
+```bash
+codex plugin marketplace add Nahuyiur/codex-switcher --ref main
+codex plugin add codex-account-switcher@codex-switcher
+```
+
+插件会调用本仓库构建出的 CLI。第一次使用前，在本仓库目录运行：
+
+```bash
+npm install
+npm run build
+```
+
 VS Code 扩展打包：
 
 ```bash
