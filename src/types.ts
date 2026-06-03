@@ -37,6 +37,44 @@ export interface AccountSummary {
   error?: string;
 }
 
+export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
+
+export type ApprovalPolicy = "untrusted" | "on-request" | "never";
+
+export type ModelPreset = "speed" | "balanced" | "smart" | "custom";
+
+export type ReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
+
+export type SpeedTier = "standard" | "fast";
+
+export interface SwitcherSettings {
+  version: 1;
+  applyAfterSwitch: boolean;
+  sandboxMode?: SandboxMode;
+  approvalPolicy?: ApprovalPolicy;
+  modelPreset: ModelPreset;
+  model?: string;
+  modelReasoningEffort?: ReasoningEffort;
+  speedTier: SpeedTier;
+  updatedAt?: string;
+}
+
+export interface SwitcherSettingsUpdate {
+  applyAfterSwitch?: boolean;
+  sandboxMode?: SandboxMode | null;
+  approvalPolicy?: ApprovalPolicy | null;
+  modelPreset?: ModelPreset | null;
+  model?: string | null;
+  modelReasoningEffort?: ReasoningEffort | null;
+  speedTier?: SpeedTier | null;
+}
+
+export interface AppliedCodexConfig {
+  configPath: string;
+  backupPath?: string;
+  changedKeys: string[];
+}
+
 export interface SwitchResult {
   targetAccountId: string;
   previousAccountId?: string;
@@ -44,6 +82,9 @@ export interface SwitchResult {
   verified: boolean;
   needsReloadHint: boolean;
   message: string;
+  selectionReason?: string;
+  appliedDefaults?: AppliedCodexConfig | null;
+  defaultsError?: string;
 }
 
 export interface StoredAccount {
@@ -64,6 +105,7 @@ export interface StoredAccount {
 export interface StoreFile {
   version: 1;
   accounts: StoredAccount[];
+  settings?: SwitcherSettings;
 }
 
 export interface ManagerOptions {

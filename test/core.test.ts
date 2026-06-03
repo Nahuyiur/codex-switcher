@@ -7,6 +7,7 @@ import { AccountSwitcher } from "../src/manager";
 import { normalizeRateWindows, pickBestAccount, scoreAccount } from "../src/rateLimits";
 import { parseAuthJson, sanitizeError, summarizeAuth } from "../src/auth";
 import { StoredAccount } from "../src/types";
+import { updateTopLevelToml } from "../src/codexConfig";
 
 test("auth parsing rejects malformed auth files", () => {
   assert.throws(() => parseAuthJson("{"), /不是合法 JSON/);
@@ -58,6 +59,30 @@ test("best account uses bottleneck balance", () => {
   assert.equal(pickBestAccount(accounts)?.id, "b");
 });
 
+test("codex config updates managed top-level keys only", () => {
+  const updated = updateTopLevelToml(
+    [
+      'model = "old-model"',
+      'service_tier = "priority"',
+      "",
+      "[profiles.remote]",
+      'model = "profile-model"',
+      'service_tier = "priority"',
+    ].join("\n"),
+    {
+      model: "gpt-5.5",
+      model_reasoning_effort: "xhigh",
+      sandbox_mode: "workspace-write",
+      service_tier: null,
+    },
+  );
+  assert.match(updated, /model = "gpt-5\.5"/);
+  assert.match(updated, /model_reasoning_effort = "xhigh"/);
+  assert.match(updated, /sandbox_mode = "workspace-write"/);
+  assert.equal(/^service_tier =/m.test(updated.split("[profiles.remote]")[0]), false);
+  assert.match(updated, /\[profiles\.remote\]\nmodel = "profile-model"\nservice_tier = "priority"/);
+});
+
 test("store can import and switch auth snapshots", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-switcher-test-"));
   const codexHome = path.join(root, "codex");
@@ -73,11 +98,26 @@ test("store can import and switch auth snapshots", async () => {
   const saved = await switcher.addCurrent("第一个");
   const imported = await switcher.importAuth(second, "第二个");
   assert.equal((await switcher.list()).length, 2);
+  const settings = await switcher.updateSettings({
+    sandboxMode: "workspace-write",
+    approvalPolicy: "on-request",
+    modelPreset: "smart",
+  });
+  assert.equal(settings.model, "gpt-5.5");
+  assert.equal(settings.modelReasoningEffort, "xhigh");
+  assert.equal(settings.speedTier, "fast");
 
   const result = await switcher.switchAccount(imported.id);
   assert.equal(result.targetAccountId, imported.id);
   assert.equal(result.verified, false);
+  assert.ok(result.appliedDefaults);
   assert.match(await fs.readFile(path.join(codexHome, "auth.json"), "utf8"), /second/);
+  const config = await fs.readFile(path.join(codexHome, "config.toml"), "utf8");
+  assert.match(config, /sandbox_mode = "workspace-write"/);
+  assert.match(config, /approval_policy = "on-request"/);
+  assert.match(config, /model = "gpt-5\.5"/);
+  assert.match(config, /model_reasoning_effort = "xhigh"/);
+  assert.match(config, /service_tier = "priority"/);
   assert.equal((await switcher.switchAccount(saved.id)).targetAccountId, saved.id);
 });
 

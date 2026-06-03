@@ -30,3 +30,7 @@ export function resolveCodexCli(options: ManagerOptions = {}): string {
 export function authJsonPath(codexHome: string): string {
   return path.join(codexHome, "auth.json");
 }
+
+export function configTomlPath(codexHome: string): string {
+  return path.join(codexHome, "config.toml");
+}

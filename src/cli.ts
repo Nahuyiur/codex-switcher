@@ -2,7 +2,8 @@
 import { AccountSwitcher } from "./manager";
 import { formatWindow, scoreAccount } from "./rateLimits";
 import { sanitizeError } from "./auth";
-import { ManagerOptions } from "./types";
+import { describeSettings, isApprovalPolicy, isModelPreset, isReasoningEffort, isSandboxMode, isSpeedTier } from "./settings";
+import { AppliedCodexConfig, ManagerOptions, SwitcherSettingsUpdate } from "./types";
 
 interface ParsedArgs {
   command?: string;
@@ -59,8 +60,44 @@ async function main(): Promise<void> {
       output(args, report, JSON.stringify(report, null, 2));
       return;
     }
+    case "defaults": {
+      await handleDefaults(args, switcher);
+      return;
+    }
     default:
       printHelp();
+  }
+}
+
+async function handleDefaults(args: ParsedArgs, switcher: AccountSwitcher): Promise<void> {
+  const action = args.values[0] || "show";
+  switch (action) {
+    case "show": {
+      const settings = await switcher.getSettings();
+      output(args, settings, renderSettings(settings));
+      return;
+    }
+    case "set": {
+      const settings = await switcher.updateSettings(readSettingsUpdate(args));
+      output(args, settings, `已保存默认运行配置：${describeSettings(settings)}`);
+      return;
+    }
+    case "preset": {
+      const preset = args.values[1];
+      if (!isModelPreset(preset)) {
+        throw new Error("请提供模型预设：speed、balanced、smart 或 custom。");
+      }
+      const settings = await switcher.updateSettings({ ...readSettingsUpdate(args), modelPreset: preset });
+      output(args, settings, `已保存模型预设：${describeSettings(settings)}`);
+      return;
+    }
+    case "apply": {
+      const result = await switcher.applyDefaults();
+      output(args, result, renderApplyResult(result));
+      return;
+    }
+    default:
+      throw new Error("defaults 支持 show、set、preset、apply。");
   }
 }
 
@@ -87,9 +124,82 @@ function output(args: ParsedArgs, value: unknown, text: string): void {
   }
 }
 
+function readSettingsUpdate(args: ParsedArgs): SwitcherSettingsUpdate {
+  const update: SwitcherSettingsUpdate = {};
+  const applyAfterSwitch = booleanFlag(args, "apply-after-switch");
+  if (applyAfterSwitch !== undefined) {
+    update.applyAfterSwitch = applyAfterSwitch;
+  }
+  if (args.flags["no-apply-after-switch"]) {
+    update.applyAfterSwitch = false;
+  }
+  const sandboxMode = stringFlag(args, "sandbox");
+  if (sandboxMode) {
+    if (!isSandboxMode(sandboxMode)) {
+      throw new Error("权限只能是 read-only、workspace-write 或 danger-full-access。");
+    }
+    update.sandboxMode = sandboxMode;
+  }
+  const approvalPolicy = stringFlag(args, "approval");
+  if (approvalPolicy) {
+    if (!isApprovalPolicy(approvalPolicy)) {
+      throw new Error("审批策略只能是 untrusted、on-request 或 never。");
+    }
+    update.approvalPolicy = approvalPolicy;
+  }
+  const modelPreset = stringFlag(args, "preset");
+  if (modelPreset) {
+    if (!isModelPreset(modelPreset)) {
+      throw new Error("模型预设只能是 speed、balanced、smart 或 custom。");
+    }
+    update.modelPreset = modelPreset;
+  }
+  const model = stringFlag(args, "model");
+  if (model) {
+    update.modelPreset = update.modelPreset || "custom";
+    update.model = model;
+  }
+  const effort = stringFlag(args, "effort");
+  if (effort) {
+    if (!isReasoningEffort(effort)) {
+      throw new Error("reasoning effort 只能是 minimal、low、medium、high 或 xhigh。");
+    }
+    update.modelPreset = update.modelPreset || "custom";
+    update.modelReasoningEffort = effort;
+  }
+  const speed = stringFlag(args, "speed");
+  if (speed) {
+    if (!isSpeedTier(speed)) {
+      throw new Error("速度档只能是 standard 或 fast。");
+    }
+    update.speedTier = speed;
+  }
+  return update;
+}
+
+function renderSettings(settings: Awaited<ReturnType<AccountSwitcher["getSettings"]>>): string {
+  return `默认运行配置：${describeSettings(settings)}
+
+可用预设：
+  speed    速度优先：gpt-5.4-mini / low / standard
+  balanced 均衡：gpt-5.5 / medium / standard
+  smart    智能优先：gpt-5.5 / xhigh / fast
+  custom   自定义模型名和 reasoning effort`;
+}
+
+function renderApplyResult(result: AppliedCodexConfig | null): string {
+  if (!result) {
+    return "没有可应用的默认运行配置。";
+  }
+  if (result.changedKeys.length === 0) {
+    return "默认运行配置已是最新。";
+  }
+  return `已应用默认运行配置：${result.changedKeys.join(", ")}。`;
+}
+
 function parseArgs(argv: string[]): ParsedArgs {
-  const parsed: ParsedArgs = { command: argv[0], values: [], flags: {} };
-  for (let index = 1; index < argv.length; index++) {
+  const parsed: ParsedArgs = { values: [], flags: {} };
+  for (let index = 0; index < argv.length; index++) {
     const part = argv[index];
     if (part.startsWith("--")) {
       const [rawKey, rawValue] = part.slice(2).split("=", 2);
@@ -101,7 +211,11 @@ function parseArgs(argv: string[]): ParsedArgs {
         parsed.flags[rawKey] = true;
       }
     } else {
-      parsed.values.push(part);
+      if (!parsed.command) {
+        parsed.command = part;
+      } else {
+        parsed.values.push(part);
+      }
     }
   }
   return parsed;
@@ -110,6 +224,23 @@ function parseArgs(argv: string[]): ParsedArgs {
 function stringFlag(args: ParsedArgs, key: string): string | undefined {
   const value = args.flags[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function booleanFlag(args: ParsedArgs, key: string): boolean | undefined {
+  const value = args.flags[key];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === true) {
+    return true;
+  }
+  if (/^(1|true|yes|on|启用|开启)$/i.test(value)) {
+    return true;
+  }
+  if (/^(0|false|no|off|禁用|关闭)$/i.test(value)) {
+    return false;
+  }
+  throw new Error(`--${key} 只能是 true 或 false。`);
 }
 
 function printHelp(): void {
@@ -123,6 +254,10 @@ function printHelp(): void {
   codex-account-switcher switch <account-id> [--json]
   codex-account-switcher switch --best [--json]
   codex-account-switcher status [--json]
+  codex-account-switcher defaults show [--json]
+  codex-account-switcher defaults set [--sandbox read-only|workspace-write|danger-full-access] [--approval untrusted|on-request|never] [--preset speed|balanced|smart|custom] [--model 模型名] [--effort minimal|low|medium|high|xhigh] [--speed standard|fast]
+  codex-account-switcher defaults preset speed|balanced|smart|custom
+  codex-account-switcher defaults apply [--json]
   codex-account-switcher doctor [--json]
 
 通用参数:

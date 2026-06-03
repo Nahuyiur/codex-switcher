@@ -3,10 +3,20 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { sanitizeError, parseAuthJson, readAuthJson, summarizeAuth, stableAuthHash } from "./auth";
 import { AppServerClient } from "./appServerClient";
-import { authJsonPath, resolveCodexHome } from "./paths";
-import { chooseCodexSnapshot, normalizeRateWindows, pickBestAccount } from "./rateLimits";
+import { applyCodexConfigDefaults } from "./codexConfig";
+import { authJsonPath, configTomlPath, resolveCodexHome } from "./paths";
+import { chooseCodexSnapshot, normalizeRateWindows, pickBestAccount, scoreAccount } from "./rateLimits";
+import { describeSettings } from "./settings";
 import { AccountStore } from "./store";
-import { AccountSummary, ManagerOptions, StoredAccount, SwitchResult } from "./types";
+import {
+  AccountSummary,
+  AppliedCodexConfig,
+  ManagerOptions,
+  StoredAccount,
+  SwitcherSettings,
+  SwitcherSettingsUpdate,
+  SwitchResult,
+} from "./types";
 
 export class AccountSwitcher {
   readonly codexHome: string;
@@ -67,20 +77,39 @@ export class AccountSwitcher {
     if (!best) {
       throw new Error("没有可用账号，或余额都读取失败。");
     }
-    return this.switchTo(best);
+    const result = await this.switchTo(best);
+    result.selectionReason = describeBestAccount(best);
+    result.message = `${result.message} 自动选择：${result.selectionReason}`;
+    return result;
   }
 
   async status(): Promise<AccountSummary | null> {
     return (await this.list()).find((account) => account.active) || null;
   }
 
+  async getSettings(): Promise<SwitcherSettings> {
+    return this.store.getSettings();
+  }
+
+  async updateSettings(update: SwitcherSettingsUpdate): Promise<SwitcherSettings> {
+    return this.store.updateSettings(update);
+  }
+
+  async applyDefaults(): Promise<AppliedCodexConfig | null> {
+    return applyCodexConfigDefaults(this.codexHome, await this.store.getSettings());
+  }
+
   async doctor(): Promise<Record<string, unknown>> {
+    const settings = await this.store.getSettings();
     return {
       codexHome: this.codexHome,
       authPath: authJsonPath(this.codexHome),
+      configPath: configTomlPath(this.codexHome),
       storeRoot: this.store.root,
       authExists: await exists(authJsonPath(this.codexHome)),
       accountCount: (await this.store.load()).accounts.length,
+      settings,
+      settingsSummary: describeSettings(settings),
     };
   }
 
@@ -110,15 +139,40 @@ export class AccountSwitcher {
         throw new Error(`写入 auth.json 失败，已尝试恢复备份: ${sanitizeError(error)}`);
       }
       const verified = await this.verifyActiveAccount(account);
+      const { appliedDefaults, defaultsError } = await this.applyDefaultsAfterSwitch();
+      const defaultsMessage = appliedDefaults
+        ? appliedDefaults.changedKeys.length
+          ? "默认运行配置已应用。"
+          : "默认运行配置已是最新。"
+        : defaultsError
+          ? "默认运行配置应用失败。"
+          : "默认运行配置未启用。";
       return {
         targetAccountId: account.id,
         previousAccountId: previousKey,
         backupPath,
         verified,
         needsReloadHint: true,
-        message: verified ? "切换完成，并已通过 account/read 验证。" : "切换已写入；account/read 验证未完成。",
+        message: `${verified ? "切换完成，并已通过 account/read 验证。" : "切换已写入；account/read 验证未完成。"} ${defaultsMessage}`,
+        appliedDefaults,
+        defaultsError,
       };
     });
+  }
+
+  private async applyDefaultsAfterSwitch(): Promise<{
+    appliedDefaults: AppliedCodexConfig | null;
+    defaultsError?: string;
+  }> {
+    const settings = await this.store.getSettings();
+    if (!settings.applyAfterSwitch) {
+      return { appliedDefaults: null };
+    }
+    try {
+      return { appliedDefaults: await applyCodexConfigDefaults(this.codexHome, settings) };
+    } catch (error) {
+      return { appliedDefaults: null, defaultsError: sanitizeError(error) };
+    }
   }
 
   private async refreshOne(account: StoredAccount): Promise<void> {
@@ -216,4 +270,17 @@ async function exists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function describeBestAccount(account: StoredAccount): string {
+  const five = account.windows?.find((window) => window.kind === "5h")?.remainingPercent;
+  const seven = account.windows?.find((window) => window.kind === "7d")?.remainingPercent;
+  const parts = [`${account.label} 瓶颈余额 ${Math.max(0, Math.round(scoreAccount(account)))}%`];
+  if (five != null) {
+    parts.push(`5小时 ${Math.round(five)}%`);
+  }
+  if (seven != null) {
+    parts.push(`7天 ${Math.round(seven)}%`);
+  }
+  return parts.join("，");
 }

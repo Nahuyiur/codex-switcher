@@ -7,6 +7,8 @@
 - 保存当前 `~/.codex/auth.json` 为账号快照。
 - 从指定路径导入已有 `auth.json`。
 - 写入目标机器的 `~/.codex/auth.json` 完成切换，并自动备份旧文件。
+- 保存默认运行配置：访问权限三档、审批策略、模型、reasoning effort 和速度档。
+- 切换账号后自动把默认运行配置写回 `~/.codex/config.toml`，避免权限或模型设置漂移。
 - 通过 Codex app-server 尝试读取 5 小时和 7 天余额；失败时不影响基础切换。
 - VS Code Activity Bar 侧栏适配本地和 Remote SSH。
 - Codex App 插件目录在 `codex-plugin/`。
@@ -19,6 +21,8 @@ npm run build
 node dist/src/cli.js add-current --label 主账号
 node dist/src/cli.js import --from /path/to/auth.json --label 备用账号
 node dist/src/cli.js refresh-limits --all
+node dist/src/cli.js defaults preset smart
+node dist/src/cli.js defaults set --sandbox workspace-write --approval on-request --speed fast
 node dist/src/cli.js switch --best
 ```
 
@@ -58,7 +62,20 @@ npm run package:vsix
 - `switch <account-id> [--json]`
 - `switch --best [--json]`
 - `status [--json]`
+- `defaults show [--json]`
+- `defaults set [--sandbox read-only|workspace-write|danger-full-access] [--approval untrusted|on-request|never] [--preset speed|balanced|smart|custom] [--model 模型名] [--effort minimal|low|medium|high|xhigh] [--speed standard|fast] [--json]`
+- `defaults preset speed|balanced|smart|custom [--json]`
+- `defaults apply [--json]`
 - `doctor [--json]`
+
+默认模型预设：
+
+- `speed`：速度优先，写入 `gpt-5.4-mini`、`low`、标准速度。
+- `balanced`：均衡，写入 `gpt-5.5`、`medium`、标准速度。
+- `smart`：智能优先，写入 `gpt-5.5`、`xhigh`、快速速度档。
+- `custom`：使用你手动指定的 `--model`、`--effort` 和 `--speed`。
+
+VS Code 侧栏里的“默认运行配置”会保存到账号库，并在切换账号后自动写入当前机器的 `~/.codex/config.toml`。Remote SSH 时扩展运行在远程 extension host，因此只影响远程服务器的 Codex 配置。
 
 通用参数：
 

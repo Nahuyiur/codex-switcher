@@ -3,7 +3,8 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { readAuthJson, stableAuthHash, summarizeAuth } from "./auth";
 import { resolveStoreRoot } from "./paths";
-import { ManagerOptions, StoreFile, StoredAccount } from "./types";
+import { normalizeSwitcherSettings, updateSwitcherSettings } from "./settings";
+import { ManagerOptions, StoreFile, StoredAccount, SwitcherSettings, SwitcherSettingsUpdate } from "./types";
 
 export class AccountStore {
   readonly root: string;
@@ -23,10 +24,10 @@ export class AccountStore {
       if (parsed?.version !== 1 || !Array.isArray(parsed.accounts)) {
         throw new Error("账号库格式不正确。");
       }
-      return parsed as StoreFile;
+      return { ...parsed, settings: normalizeSwitcherSettings(parsed.settings) } as StoreFile;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        return { version: 1, accounts: [] };
+        return { version: 1, accounts: [], settings: normalizeSwitcherSettings(undefined) };
       }
       throw error;
     }
@@ -69,6 +70,17 @@ export class AccountStore {
     const store = await this.load();
     store.accounts = store.accounts.map((entry) => (entry.id === account.id ? account : entry));
     await this.save(store);
+  }
+
+  async getSettings(): Promise<SwitcherSettings> {
+    return normalizeSwitcherSettings((await this.load()).settings);
+  }
+
+  async updateSettings(update: SwitcherSettingsUpdate): Promise<SwitcherSettings> {
+    const store = await this.load();
+    store.settings = updateSwitcherSettings(store.settings, update);
+    await this.save(store);
+    return store.settings;
   }
 
   async readSnapshot(account: StoredAccount): Promise<string> {
