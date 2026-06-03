@@ -1,0 +1,92 @@
+{
+  "name": "codex-account-switcher",
+  "displayName": "Codex 账号切换器",
+  "description": "在本机或 VS Code Remote 中保存、导入、查看余额并快速切换 Codex 账号。",
+  "version": "0.1.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Nahuyiur/codex-switcher.git"
+  },
+  "type": "commonjs",
+  "main": "./dist/src/vscode/extension.js",
+  "bin": {
+    "codex-account-switcher": "./dist/src/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "package:vsix": "npm run build && vsce package --no-dependencies"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "activationEvents": [
+    "onView:codexAccountSwitcher.accountsView",
+    "onCommand:codexAccountSwitcher.refresh",
+    "onCommand:codexAccountSwitcher.addCurrent",
+    "onCommand:codexAccountSwitcher.importAuth",
+    "onCommand:codexAccountSwitcher.switchBest"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codexAccountSwitcher",
+          "title": "Codex 账号",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "codexAccountSwitcher": [
+        {
+          "id": "codexAccountSwitcher.accountsView",
+          "name": "账号切换"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "codexAccountSwitcher.refresh",
+        "title": "Codex 账号: 刷新"
+      },
+      {
+        "command": "codexAccountSwitcher.addCurrent",
+        "title": "Codex 账号: 保存当前账号"
+      },
+      {
+        "command": "codexAccountSwitcher.importAuth",
+        "title": "Codex 账号: 从 auth.json 导入"
+      },
+      {
+        "command": "codexAccountSwitcher.switchBest",
+        "title": "Codex 账号: 切换到余额最多账号"
+      }
+    ],
+    "configuration": {
+      "title": "Codex 账号切换器",
+      "properties": {
+        "codexAccountSwitcher.accountLibraryPath": {
+          "type": "string",
+          "default": "",
+          "description": "账号库路径。留空时使用 ~/.codex/account-switcher。"
+        },
+        "codexAccountSwitcher.codexCliPath": {
+          "type": "string",
+          "default": "",
+          "description": "Codex CLI 路径。留空时使用 CODEX_CLI_PATH 或 PATH 中的 codex。"
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.67",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "2.15.0",
+    "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "cheerio": "1.0.0-rc.12"
+  }
+}

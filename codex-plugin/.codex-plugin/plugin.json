@@ -1,0 +1,29 @@
+{
+  "name": "codex-account-switcher",
+  "version": "0.1.0",
+  "description": "在 Codex App 中辅助保存、导入、刷新余额并切换 Codex 账号。",
+  "author": {
+    "name": "Local"
+  },
+  "homepage": "https://openai.com/",
+  "repository": "local",
+  "license": "MIT",
+  "keywords": ["codex", "account", "auth", "switcher"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex 账号切换器",
+    "shortDescription": "保存、导入、查看余额并切换 Codex 账号",
+    "longDescription": "在本机 Codex App 中使用共享 CLI 管理多个 Codex auth.json 快照，支持手动切换和按余额自动切换。",
+    "developerName": "Local",
+    "category": "Developer Tools",
+    "capabilities": ["Interactive", "Write"],
+    "websiteURL": "https://openai.com/",
+    "defaultPrompt": [
+      "列出我的 Codex 账号余额",
+      "把当前 Codex 登录保存成一个账号",
+      "切换到 Codex 余额最多的账号"
+    ],
+    "brandColor": "#2563EB",
+    "screenshots": []
+  }
+}
