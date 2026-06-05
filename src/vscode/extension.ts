@@ -184,9 +184,11 @@ class AccountsViewProvider implements vscode.WebviewViewProvider {
 
   private switcher(): AccountSwitcher {
     const config = vscode.workspace.getConfiguration("codexAccountSwitcher");
+    const baseDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const options: ManagerOptions = {
       accountLibraryPath: config.get<string>("accountLibraryPath") || undefined,
       codexCliPath: config.get<string>("codexCliPath") || undefined,
+      baseDir,
     };
     return new AccountSwitcher(options);
   }
@@ -293,7 +295,8 @@ class AccountsViewProvider implements vscode.WebviewViewProvider {
         model: form.model.value,
         modelReasoningEffort: form.modelReasoningEffort.value,
         speedTier: form.speedTier.value,
-        applyAfterSwitch: form.applyAfterSwitch.checked
+        applyAfterSwitch: form.applyAfterSwitch.checked,
+        restartAppServerAfterSwitch: form.restartAppServerAfterSwitch.checked
       };
     }
     document.getElementById('modelPreset')?.addEventListener('change', (event) => {
@@ -350,6 +353,7 @@ function renderSettingsPanel(settings?: SwitcherSettings): string {
     model: "",
     modelReasoningEffort: "medium",
     speedTier: "standard",
+    restartAppServerAfterSwitch: false,
   };
   const models = KNOWN_MODELS.map((model) => `<option value="${escapeHtml(model)}"></option>`).join("");
   return `<div class="section-title"><span>默认运行配置</span><span>${current.applyAfterSwitch ? "自动应用" : "手动应用"}</span></div>
@@ -409,6 +413,7 @@ function renderSettingsPanel(settings?: SwitcherSettings): string {
         </div>
       </div>
       <label class="check"><input type="checkbox" name="applyAfterSwitch" ${current.applyAfterSwitch ? "checked" : ""}>切换账号后应用</label>
+      <label class="check"><input type="checkbox" name="restartAppServerAfterSwitch" ${current.restartAppServerAfterSwitch ? "checked" : ""}>切换后重启 app-server</label>
     </div>
     <div class="settings-actions">
       <button type="button" class="primary" data-command="saveSettings" data-apply-now="true">保存并应用</button>
@@ -472,6 +477,7 @@ function parseSettingsMessage(raw: Record<string, unknown> | undefined): Switche
     modelReasoningEffort,
     speedTier,
     applyAfterSwitch: Boolean(raw.applyAfterSwitch),
+    restartAppServerAfterSwitch: Boolean(raw.restartAppServerAfterSwitch),
   };
 }
 

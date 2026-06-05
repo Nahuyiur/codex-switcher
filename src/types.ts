@@ -50,6 +50,7 @@ export type SpeedTier = "standard" | "fast";
 export interface SwitcherSettings {
   version: 1;
   applyAfterSwitch: boolean;
+  restartAppServerAfterSwitch: boolean;
   sandboxMode?: SandboxMode;
   approvalPolicy?: ApprovalPolicy;
   modelPreset: ModelPreset;
@@ -61,6 +62,7 @@ export interface SwitcherSettings {
 
 export interface SwitcherSettingsUpdate {
   applyAfterSwitch?: boolean;
+  restartAppServerAfterSwitch?: boolean;
   sandboxMode?: SandboxMode | null;
   approvalPolicy?: ApprovalPolicy | null;
   modelPreset?: ModelPreset | null;
@@ -75,16 +77,26 @@ export interface AppliedCodexConfig {
   changedKeys: string[];
 }
 
+export interface DaemonRestartResult {
+  attempted: boolean;
+  success: boolean;
+  message: string;
+  error?: string;
+}
+
 export interface SwitchResult {
   targetAccountId: string;
   previousAccountId?: string;
   backupPath: string;
   verified: boolean;
+  diskAuthWritten: boolean;
+  refreshedAuthSnapshot: boolean;
   needsReloadHint: boolean;
   message: string;
   selectionReason?: string;
   appliedDefaults?: AppliedCodexConfig | null;
   defaultsError?: string;
+  appServerDaemonRestart?: DaemonRestartResult;
 }
 
 export interface StoredAccount {
@@ -113,6 +125,7 @@ export interface ManagerOptions {
   accountLibraryPath?: string;
   codexCliPath?: string;
   appServerTimeoutMs?: number;
+  baseDir?: string;
 }
 
 export interface RateLimitWindowRaw {

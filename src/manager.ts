@@ -1,16 +1,18 @@
+import { spawn } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { sanitizeError, parseAuthJson, readAuthJson, summarizeAuth, stableAuthHash } from "./auth";
 import { AppServerClient } from "./appServerClient";
 import { applyCodexConfigDefaults } from "./codexConfig";
-import { authJsonPath, configTomlPath, resolveCodexHome } from "./paths";
+import { authJsonPath, configTomlPath, resolveCodexCli, resolveCodexHome, resolveInputPath } from "./paths";
 import { chooseCodexSnapshot, normalizeRateWindows, pickBestAccount, scoreAccount } from "./rateLimits";
 import { describeSettings } from "./settings";
 import { AccountStore } from "./store";
 import {
   AccountSummary,
   AppliedCodexConfig,
+  DaemonRestartResult,
   ManagerOptions,
   StoredAccount,
   SwitcherSettings,
@@ -32,7 +34,7 @@ export class AccountSwitcher {
   }
 
   async importAuth(filePath: string, label?: string): Promise<StoredAccount> {
-    return this.store.upsertFromAuthFile(path.resolve(filePath), label);
+    return this.store.upsertFromAuthFile(resolveInputPath(filePath, this.options), label);
   }
 
   async list(): Promise<AccountSummary[]> {
@@ -138,8 +140,9 @@ export class AccountSwitcher {
         await safeCopy(backupPath, targetPath);
         throw new Error(`写入 auth.json 失败，已尝试恢复备份: ${sanitizeError(error)}`);
       }
-      const verified = await this.verifyActiveAccount(account);
+      const verification = await this.verifyAndRefreshActiveAccount(account, snapshot);
       const { appliedDefaults, defaultsError } = await this.applyDefaultsAfterSwitch();
+      const appServerDaemonRestart = await this.restartAppServerDaemonAfterSwitch();
       const defaultsMessage = appliedDefaults
         ? appliedDefaults.changedKeys.length
           ? "默认运行配置已应用。"
@@ -147,17 +150,67 @@ export class AccountSwitcher {
         : defaultsError
           ? "默认运行配置应用失败。"
           : "默认运行配置未启用。";
+      const restartMessage = appServerDaemonRestart?.attempted
+        ? appServerDaemonRestart.success
+          ? "app-server daemon 已重启。"
+          : "app-server daemon 重启失败。"
+        : "app-server daemon 未重启。";
       return {
         targetAccountId: account.id,
         previousAccountId: previousKey,
         backupPath,
-        verified,
+        verified: verification.verified,
+        diskAuthWritten: true,
+        refreshedAuthSnapshot: verification.snapshotUpdated,
         needsReloadHint: true,
-        message: `${verified ? "切换完成，并已通过 account/read 验证。" : "切换已写入；account/read 验证未完成。"} ${defaultsMessage}`,
+        message: `${verification.verified ? "磁盘账号已切换，并已通过 account/read refresh 验证。" : "磁盘账号已切换；account/read refresh 验证未完成。"} ${verification.snapshotUpdated ? "刷新后的 auth 已同步回账号快照。" : "账号快照未更新。"} ${defaultsMessage} ${restartMessage} 运行中的 Codex App 可能仍需 reload/restart。`,
         appliedDefaults,
         defaultsError,
+        appServerDaemonRestart,
       };
     });
+  }
+
+  private async verifyAndRefreshActiveAccount(
+    account: StoredAccount,
+    originalSnapshot: string,
+  ): Promise<{ verified: boolean; snapshotUpdated: boolean }> {
+    const client = new AppServerClient(this.codexHome, this.options);
+    try {
+      const response = await client.readAccount(true);
+      if (!response.account || response.requiresOpenaiAuth) {
+        return { verified: false, snapshotUpdated: false };
+      }
+      if (account.email && response.account.email && account.email !== response.account.email) {
+        return { verified: false, snapshotUpdated: false };
+      }
+
+      const refreshedAuth = await fs.readFile(authJsonPath(this.codexHome), "utf8").catch(() => undefined);
+      let snapshotUpdated = false;
+      if (refreshedAuth) {
+        parseAuthJson(refreshedAuth);
+        snapshotUpdated = normalizeAuthText(refreshedAuth) !== normalizeAuthText(originalSnapshot);
+        if (snapshotUpdated) {
+          await this.store.replaceSnapshot(account, refreshedAuth);
+        }
+      }
+
+      const refreshedSummary = refreshedAuth ? summarizeAuth(parseAuthJson(refreshedAuth)) : undefined;
+      await this.store.updateAccount({
+        ...account,
+        updatedAt: new Date().toISOString(),
+        email: response.account.email || account.email,
+        planType: response.account.planType || account.planType,
+        accountId: refreshedSummary?.accountId || account.accountId,
+        error: undefined,
+      });
+
+      return { verified: true, snapshotUpdated };
+    } catch {
+      return { verified: false, snapshotUpdated: false };
+    } finally {
+      client.close();
+    }
   }
 
   private async applyDefaultsAfterSwitch(): Promise<{
@@ -173,6 +226,57 @@ export class AccountSwitcher {
     } catch (error) {
       return { appliedDefaults: null, defaultsError: sanitizeError(error) };
     }
+  }
+
+  private async restartAppServerDaemonAfterSwitch(): Promise<DaemonRestartResult | undefined> {
+    const settings = await this.store.getSettings();
+    if (!settings.restartAppServerAfterSwitch) {
+      return undefined;
+    }
+    const cli = resolveCodexCli(this.options);
+    const timeoutMs = this.options.appServerTimeoutMs ?? 15_000;
+    return new Promise((resolve) => {
+      const child = spawn(cli, ["app-server", "daemon", "restart"], {
+        env: { ...process.env, CODEX_HOME: this.codexHome },
+        stdio: "pipe",
+      });
+      let stderr = "";
+      let stdout = "";
+      const timer = setTimeout(() => {
+        child.kill();
+        resolve({
+          attempted: true,
+          success: false,
+          message: "app-server daemon 重启超时。",
+          error: "timeout",
+        });
+      }, timeoutMs);
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString("utf8");
+      });
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString("utf8");
+      });
+      child.on("error", (error) => {
+        clearTimeout(timer);
+        resolve({
+          attempted: true,
+          success: false,
+          message: "无法启动 Codex app-server daemon restart。",
+          error: sanitizeError(error),
+        });
+      });
+      child.on("exit", (code) => {
+        clearTimeout(timer);
+        const output = sanitizeError(`${stdout}\n${stderr}`.trim());
+        resolve({
+          attempted: true,
+          success: code === 0,
+          message: code === 0 ? "app-server daemon 已重启。" : `app-server daemon 重启失败，退出码 ${code ?? "unknown"}。`,
+          error: code === 0 ? undefined : output,
+        });
+      });
+    });
   }
 
   private async refreshOne(account: StoredAccount): Promise<void> {
@@ -206,24 +310,6 @@ export class AccountSwitcher {
     await this.store.updateAccount(nextAccount);
   }
 
-  private async verifyActiveAccount(account: StoredAccount): Promise<boolean> {
-    const client = new AppServerClient(this.codexHome, this.options);
-    try {
-      const response = await client.readAccount(false);
-      if (!response.account || response.requiresOpenaiAuth) {
-        return false;
-      }
-      if (account.email && response.account.email) {
-        return account.email === response.account.email;
-      }
-      return true;
-    } catch {
-      return false;
-    } finally {
-      client.close();
-    }
-  }
-
   private async readActiveKey(): Promise<string | undefined> {
     try {
       const auth = await readAuthJson(authJsonPath(this.codexHome));
@@ -233,6 +319,10 @@ export class AccountSwitcher {
       return undefined;
     }
   }
+}
+
+function normalizeAuthText(input: string): string {
+  return JSON.stringify(parseAuthJson(input));
 }
 
 async function withLock<T>(lockDir: string, action: () => Promise<T>): Promise<T> {

@@ -110,6 +110,8 @@ test("store can import and switch auth snapshots", async () => {
   const result = await switcher.switchAccount(imported.id);
   assert.equal(result.targetAccountId, imported.id);
   assert.equal(result.verified, false);
+  assert.equal(result.diskAuthWritten, true);
+  assert.equal(result.refreshedAuthSnapshot, false);
   assert.ok(result.appliedDefaults);
   assert.match(await fs.readFile(path.join(codexHome, "auth.json"), "utf8"), /second/);
   const config = await fs.readFile(path.join(codexHome, "config.toml"), "utf8");
@@ -119,6 +121,62 @@ test("store can import and switch auth snapshots", async () => {
   assert.match(config, /model_reasoning_effort = "xhigh"/);
   assert.match(config, /service_tier = "priority"/);
   assert.equal((await switcher.switchAccount(saved.id)).targetAccountId, saved.id);
+});
+
+test("switch refreshes active auth and syncs refreshed snapshot", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-switcher-refresh-test-"));
+  const codexHome = path.join(root, "codex");
+  const store = path.join(root, "store");
+  const cli = path.join(root, "mock-codex.js");
+  await fs.mkdir(codexHome, { recursive: true });
+  await fs.writeFile(cli, mockCodexCli(), "utf8");
+  await fs.chmod(cli, 0o755);
+
+  const authPath = path.join(root, "target.auth.json");
+  await fs.writeFile(
+    authPath,
+    JSON.stringify({ tokens: { id_token: jwt("target@example.com", "acct-target"), access_token: "old-token", refresh_token: "rt-old" } }),
+    "utf8",
+  );
+
+  const switcher = new AccountSwitcher({
+    baseDir: root,
+    codexHome,
+    accountLibraryPath: store,
+    codexCliPath: "./mock-codex.js",
+    appServerTimeoutMs: 1_000,
+  });
+  const account = await switcher.importAuth("./target.auth.json", "目标账号");
+  await switcher.updateSettings({ restartAppServerAfterSwitch: true });
+
+  const result = await switcher.switchAccount(account.id);
+  assert.equal(result.verified, true);
+  assert.equal(result.diskAuthWritten, true);
+  assert.equal(result.refreshedAuthSnapshot, true);
+  assert.equal(result.appServerDaemonRestart?.success, true);
+  assert.match(await fs.readFile(path.join(codexHome, "auth.json"), "utf8"), /new-token/);
+  assert.match(await fs.readFile(path.join(store, account.snapshotFile), "utf8"), /new-token/);
+});
+
+test("relative codex and store paths resolve from configured baseDir", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-switcher-relative-test-"));
+  const authPath = path.join(root, "account.auth.json");
+  await fs.writeFile(authPath, JSON.stringify({ tokens: { access_token: "a", refresh_token: "r", account_id: "relative" } }), "utf8");
+
+  const switcher = new AccountSwitcher({
+    baseDir: root,
+    codexHome: "./codex",
+    accountLibraryPath: "./store",
+    codexCliPath: "/missing/codex",
+    appServerTimeoutMs: 25,
+  });
+  await fs.mkdir(path.join(root, "codex"), { recursive: true });
+  await fs.copyFile(authPath, path.join(root, "codex", "auth.json"));
+  const account = await switcher.importAuth("./account.auth.json", "相对路径账号");
+
+  assert.equal(switcher.codexHome, path.join(root, "codex"));
+  assert.equal(switcher.store.root, path.join(root, "store"));
+  assert.equal(account.sourcePath, authPath);
 });
 
 test("sanitizeError redacts common token shapes", () => {
@@ -140,4 +198,53 @@ function account(id: string, five: number, seven: number): StoredAccount {
       { kind: "7d", usedPercent: 100 - seven, remainingPercent: seven, windowDurationMins: 10080, resetsAt: null },
     ],
   };
+}
+
+function jwt(email: string, accountId: string): string {
+  const payload = Buffer.from(
+    JSON.stringify({
+      email,
+      "https://api.openai.com/auth": {
+        chatgpt_account_id: accountId,
+        chatgpt_plan_type: "pro",
+      },
+    }),
+  ).toString("base64url");
+  return `x.${payload}.y`;
+}
+
+function mockCodexCli(): string {
+  return `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+if (process.argv.includes("daemon") && process.argv.includes("restart")) {
+  process.exit(0);
+}
+let buffer = "";
+process.stdin.on("data", (chunk) => {
+  buffer += chunk.toString("utf8");
+  while (buffer.includes("\\n")) {
+    const index = buffer.indexOf("\\n");
+    const line = buffer.slice(0, index).trim();
+    buffer = buffer.slice(index + 1);
+    if (!line) continue;
+    const message = JSON.parse(line);
+    if (message.method === "initialize") {
+      process.stdout.write(JSON.stringify({ id: message.id, result: {} }) + "\\n");
+    } else if (message.method === "account/read") {
+      const authPath = path.join(process.env.CODEX_HOME, "auth.json");
+      const auth = JSON.parse(fs.readFileSync(authPath, "utf8"));
+      auth.tokens.access_token = "new-token";
+      fs.writeFileSync(authPath, JSON.stringify(auth, null, 2) + "\\n");
+      process.stdout.write(JSON.stringify({
+        id: message.id,
+        result: {
+          account: { type: "chatgpt", email: "target@example.com", planType: "pro" },
+          requiresOpenaiAuth: false
+        }
+      }) + "\\n");
+    }
+  }
+});
+`;
 }

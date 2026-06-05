@@ -29,6 +29,7 @@ export function defaultSwitcherSettings(): SwitcherSettings {
   return {
     version: 1,
     applyAfterSwitch: true,
+    restartAppServerAfterSwitch: false,
     sandboxMode: "workspace-write",
     approvalPolicy: "on-request",
     modelPreset: "custom",
@@ -45,6 +46,10 @@ export function normalizeSwitcherSettings(input: unknown): SwitcherSettings {
   const next: SwitcherSettings = {
     version: 1,
     applyAfterSwitch: typeof raw.applyAfterSwitch === "boolean" ? raw.applyAfterSwitch : defaults.applyAfterSwitch,
+    restartAppServerAfterSwitch:
+      typeof raw.restartAppServerAfterSwitch === "boolean"
+        ? raw.restartAppServerAfterSwitch
+        : defaults.restartAppServerAfterSwitch,
     sandboxMode: isSandboxMode(raw.sandboxMode) ? raw.sandboxMode : defaults.sandboxMode,
     approvalPolicy: isApprovalPolicy(raw.approvalPolicy) ? raw.approvalPolicy : defaults.approvalPolicy,
     modelPreset: isModelPreset(raw.modelPreset) ? raw.modelPreset : defaults.modelPreset,
@@ -66,6 +71,9 @@ export function updateSwitcherSettings(
   const next = normalizeSwitcherSettings(current);
   if (update.applyAfterSwitch !== undefined) {
     next.applyAfterSwitch = update.applyAfterSwitch;
+  }
+  if (update.restartAppServerAfterSwitch !== undefined) {
+    next.restartAppServerAfterSwitch = update.restartAppServerAfterSwitch;
   }
   if (update.sandboxMode !== undefined) {
     next.sandboxMode = update.sandboxMode ?? undefined;
@@ -134,5 +142,6 @@ export function describeSettings(settings: SwitcherSettings): string {
   const model = settings.model ? `${settings.model}${settings.modelReasoningEffort ? `/${settings.modelReasoningEffort}` : ""}` : "不覆盖模型";
   const speed = settings.speedTier === "fast" ? "快速" : "标准";
   const apply = settings.applyAfterSwitch ? "切换后自动应用" : "仅保存不自动应用";
-  return `权限 ${settings.sandboxMode || "不覆盖"}，审批 ${settings.approvalPolicy || "不覆盖"}，模型 ${model}，速度 ${speed}，${apply}`;
+  const restart = settings.restartAppServerAfterSwitch ? "切换后重启 app-server" : "不重启 app-server";
+  return `权限 ${settings.sandboxMode || "不覆盖"}，审批 ${settings.approvalPolicy || "不覆盖"}，模型 ${model}，速度 ${speed}，${apply}，${restart}`;
 }

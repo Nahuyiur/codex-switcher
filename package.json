@@ -70,12 +70,12 @@
         "codexAccountSwitcher.accountLibraryPath": {
           "type": "string",
           "default": "",
-          "description": "账号库路径。留空时使用 ~/.codex/account-switcher。"
+          "description": "账号库路径。留空时使用 ~/.codex/account-switcher；相对路径按当前工作区解析。"
         },
         "codexAccountSwitcher.codexCliPath": {
           "type": "string",
           "default": "",
-          "description": "Codex CLI 路径。留空时使用 CODEX_CLI_PATH 或 PATH 中的 codex。"
+          "description": "Codex CLI 路径。留空时使用 CODEX_CLI_PATH 或 PATH 中的 codex；./tools/codex 这类相对路径按当前工作区解析。"
         }
       }
     }

@@ -133,6 +133,13 @@ function readSettingsUpdate(args: ParsedArgs): SwitcherSettingsUpdate {
   if (args.flags["no-apply-after-switch"]) {
     update.applyAfterSwitch = false;
   }
+  const restartAfterSwitch = booleanFlag(args, "restart-app-server-after-switch");
+  if (restartAfterSwitch !== undefined) {
+    update.restartAppServerAfterSwitch = restartAfterSwitch;
+  }
+  if (args.flags["no-restart-app-server-after-switch"]) {
+    update.restartAppServerAfterSwitch = false;
+  }
   const sandboxMode = stringFlag(args, "sandbox");
   if (sandboxMode) {
     if (!isSandboxMode(sandboxMode)) {
@@ -184,7 +191,11 @@ function renderSettings(settings: Awaited<ReturnType<AccountSwitcher["getSetting
   speed    速度优先：gpt-5.4-mini / low / standard
   balanced 均衡：gpt-5.5 / medium / standard
   smart    智能优先：gpt-5.5 / xhigh / fast
-  custom   自定义模型名和 reasoning effort`;
+  custom   自定义模型名和 reasoning effort
+
+运行态：
+  --restart-app-server-after-switch true   切换后尝试重启 app-server daemon
+  --no-restart-app-server-after-switch     切换后不重启 app-server daemon`;
 }
 
 function renderApplyResult(result: AppliedCodexConfig | null): string {
@@ -255,15 +266,15 @@ function printHelp(): void {
   codex-account-switcher switch --best [--json]
   codex-account-switcher status [--json]
   codex-account-switcher defaults show [--json]
-  codex-account-switcher defaults set [--sandbox read-only|workspace-write|danger-full-access] [--approval untrusted|on-request|never] [--preset speed|balanced|smart|custom] [--model 模型名] [--effort minimal|low|medium|high|xhigh] [--speed standard|fast]
+  codex-account-switcher defaults set [--sandbox read-only|workspace-write|danger-full-access] [--approval untrusted|on-request|never] [--preset speed|balanced|smart|custom] [--model 模型名] [--effort minimal|low|medium|high|xhigh] [--speed standard|fast] [--restart-app-server-after-switch true|false]
   codex-account-switcher defaults preset speed|balanced|smart|custom
   codex-account-switcher defaults apply [--json]
   codex-account-switcher doctor [--json]
 
 通用参数:
-  --codex-home <path>   指定目标 CODEX_HOME
-  --store <path>        指定账号库路径
-  --codex-cli <path>    指定 codex CLI 路径
+  --codex-home <path>   指定目标 CODEX_HOME，支持 ~ 和相对路径
+  --store <path>        指定账号库路径，支持 ~ 和相对路径
+  --codex-cli <path>    指定 codex CLI 路径；裸命令走 PATH，路径支持 ~ 和相对路径
 `);
 }
 

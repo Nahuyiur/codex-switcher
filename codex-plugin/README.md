@@ -14,6 +14,8 @@ npm run build
 安装后可以直接在 Codex App 里说：
 
 - “列出 Codex 账号”
+- “从 `./accounts/backup.auth.json` 导入一个账号”
 - “切换到余额最多的账号”
 - “把默认权限设成工作区可写”
 - “把默认模型设成智能优先并立即应用”
+- “切换账号后自动重启 app-server”

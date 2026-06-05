@@ -11,18 +11,23 @@ Use this skill when the user wants to manage local Codex accounts from Codex App
 - For listing accounts, run `codex-account-switcher list --json` and summarize label, active state, 5小时余额, 7天余额, and any error.
 - To save the current account, run `codex-account-switcher add-current --label <名称>`.
 - To import a file, ask for or use the path, then run `codex-account-switcher import --from <path> --label <名称>`.
+- Relative paths are supported; interpret them relative to the current conversation working directory.
 - To refresh balances, run `codex-account-switcher refresh-limits --all --json`.
-- To switch to a specific account, run `codex-account-switcher switch <account-id> --json` and report whether `verified` is true.
+- To switch to a specific account, run `codex-account-switcher switch <account-id> --json` and report `diskAuthWritten`, `verified`, `refreshedAuthSnapshot`, `appServerDaemonRestart`, and whether reload/restart may still be needed.
 - To switch automatically, run `codex-account-switcher switch --best --json`.
 - To show default runtime settings, run `codex-account-switcher defaults show --json`.
 - To set the permission preset, use `codex-account-switcher defaults set --sandbox read-only|workspace-write|danger-full-access --json`.
 - To set model behavior quickly, use `codex-account-switcher defaults preset speed|balanced|smart|custom --json`.
 - To set custom model settings, use `codex-account-switcher defaults set --model <model> --effort minimal|low|medium|high|xhigh --speed standard|fast --json`.
+- To enable daemon restart after future switches, run `codex-account-switcher defaults set --restart-app-server-after-switch true --json`.
+- To disable daemon restart after future switches, run `codex-account-switcher defaults set --no-restart-app-server-after-switch --json`.
 - To apply saved defaults immediately, run `codex-account-switcher defaults apply --json`.
 
 ## Notes
 
 - Switching writes the selected snapshot to the target machine's `~/.codex/auth.json`.
+- Switching verifies with `account/read(refreshToken=true)`; if Codex refreshes auth during verification, the refreshed `auth.json` is synced back into the saved account snapshot.
 - If enabled, switching also writes saved defaults to `~/.codex/config.toml` for `sandbox_mode`, `approval_policy`, `model`, `model_reasoning_effort`, and `service_tier`.
+- If enabled, switching also runs `codex app-server daemon restart`; this is optional and defaults to off.
 - Running Codex turns may need reload/restart before they see the new auth.
 - In VS Code Remote SSH, use the VS Code extension instead; it runs on the remote extension host and operates on the remote `~/.codex`.
