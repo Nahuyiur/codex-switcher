@@ -13,14 +13,16 @@ Use this skill when the user wants to manage local Codex accounts from Codex App
 - To import a file, ask for or use the path, then run `codex-account-switcher import --from <path> --label <名称>`.
 - Relative paths are supported; interpret them relative to the current conversation working directory.
 - To refresh balances, run `codex-account-switcher refresh-limits --all --json`.
-- To switch to a specific account, run `codex-account-switcher switch <account-id> --json` and report `diskAuthWritten`, `verified`, `refreshedAuthSnapshot`, `appServerDaemonRestart`, and whether reload/restart may still be needed.
+- To switch to a specific account, run `codex-account-switcher switch <account-id> --json` and report `diskAuthWritten`, `verified`, `refreshedAuthSnapshot`, `appServerDaemonRestart.strategy`, `appServerDaemonRestart.scheduled`, and whether reload/restart may still be needed.
 - To switch automatically, run `codex-account-switcher switch --best --json`.
 - To show default runtime settings, run `codex-account-switcher defaults show --json`.
 - To set the permission preset, use `codex-account-switcher defaults set --sandbox read-only|workspace-write|danger-full-access --json`.
 - To set model behavior quickly, use `codex-account-switcher defaults preset speed|balanced|smart|custom --json`.
 - To set custom model settings, use `codex-account-switcher defaults set --model <model> --effort minimal|low|medium|high|xhigh --speed standard|fast --json`.
-- To enable daemon restart after future switches, run `codex-account-switcher defaults set --restart-app-server-after-switch true --json`.
-- To disable daemon restart after future switches, run `codex-account-switcher defaults set --no-restart-app-server-after-switch --json`.
+- To enable automatic runtime refresh after future switches, run `codex-account-switcher defaults set --restart-app-server-after-switch true --app-server-restart-mode auto --json`.
+- To force standalone/remote daemon restart only, run `codex-account-switcher defaults set --restart-app-server-after-switch true --app-server-restart-mode daemon --json`.
+- To force macOS Codex App app-server refresh only, run `codex-account-switcher defaults set --restart-app-server-after-switch true --app-server-restart-mode codex-app --json`.
+- To disable runtime refresh after future switches, run `codex-account-switcher defaults set --no-restart-app-server-after-switch --json`.
 - To apply saved defaults immediately, run `codex-account-switcher defaults apply --json`.
 
 ## Notes
@@ -28,6 +30,6 @@ Use this skill when the user wants to manage local Codex accounts from Codex App
 - Switching writes the selected snapshot to the target machine's `~/.codex/auth.json`.
 - Switching verifies with `account/read(refreshToken=true)`; if Codex refreshes auth during verification, the refreshed `auth.json` is synced back into the saved account snapshot.
 - If enabled, switching also writes saved defaults to `~/.codex/config.toml` for `sandbox_mode`, `approval_policy`, `model`, `model_reasoning_effort`, and `service_tier`.
-- If enabled, switching also runs `codex app-server daemon restart`; this is optional and defaults to off.
-- Running Codex turns may need reload/restart before they see the new auth.
+- If enabled in `auto` mode, switching first tries `codex app-server daemon restart`; if the desktop app is not a standalone install, macOS Codex App app-server refresh is scheduled about 12 seconds after the CLI returns so the assistant can report the result first.
+- Running Codex turns may briefly reconnect when the app-server refresh is scheduled. If a loaded turn still does not see the new auth, start a new turn/thread.
 - In VS Code Remote SSH, use the VS Code extension instead; it runs on the remote extension host and operates on the remote `~/.codex`.

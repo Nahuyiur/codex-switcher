@@ -1,4 +1,5 @@
 import {
+  AppServerRestartMode,
   ApprovalPolicy,
   ModelPreset,
   ReasoningEffort,
@@ -13,6 +14,7 @@ const APPROVAL_POLICIES: ApprovalPolicy[] = ["untrusted", "on-request", "never"]
 const MODEL_PRESETS: ModelPreset[] = ["speed", "balanced", "smart", "custom"];
 const REASONING_EFFORTS: ReasoningEffort[] = ["minimal", "low", "medium", "high", "xhigh"];
 const SPEED_TIERS: SpeedTier[] = ["standard", "fast"];
+const APP_SERVER_RESTART_MODES: AppServerRestartMode[] = ["auto", "daemon", "codex-app"];
 
 export const KNOWN_MODELS = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex", "gpt-5.2"] as const;
 
@@ -30,6 +32,7 @@ export function defaultSwitcherSettings(): SwitcherSettings {
     version: 1,
     applyAfterSwitch: true,
     restartAppServerAfterSwitch: false,
+    appServerRestartMode: "auto",
     sandboxMode: "workspace-write",
     approvalPolicy: "on-request",
     modelPreset: "custom",
@@ -50,6 +53,9 @@ export function normalizeSwitcherSettings(input: unknown): SwitcherSettings {
       typeof raw.restartAppServerAfterSwitch === "boolean"
         ? raw.restartAppServerAfterSwitch
         : defaults.restartAppServerAfterSwitch,
+    appServerRestartMode: isAppServerRestartMode(raw.appServerRestartMode)
+      ? raw.appServerRestartMode
+      : defaults.appServerRestartMode,
     sandboxMode: isSandboxMode(raw.sandboxMode) ? raw.sandboxMode : defaults.sandboxMode,
     approvalPolicy: isApprovalPolicy(raw.approvalPolicy) ? raw.approvalPolicy : defaults.approvalPolicy,
     modelPreset: isModelPreset(raw.modelPreset) ? raw.modelPreset : defaults.modelPreset,
@@ -74,6 +80,9 @@ export function updateSwitcherSettings(
   }
   if (update.restartAppServerAfterSwitch !== undefined) {
     next.restartAppServerAfterSwitch = update.restartAppServerAfterSwitch;
+  }
+  if (update.appServerRestartMode !== undefined) {
+    next.appServerRestartMode = update.appServerRestartMode ?? "auto";
   }
   if (update.sandboxMode !== undefined) {
     next.sandboxMode = update.sandboxMode ?? undefined;
@@ -138,10 +147,16 @@ export function isSpeedTier(value: unknown): value is SpeedTier {
   return typeof value === "string" && SPEED_TIERS.includes(value as SpeedTier);
 }
 
+export function isAppServerRestartMode(value: unknown): value is AppServerRestartMode {
+  return typeof value === "string" && APP_SERVER_RESTART_MODES.includes(value as AppServerRestartMode);
+}
+
 export function describeSettings(settings: SwitcherSettings): string {
   const model = settings.model ? `${settings.model}${settings.modelReasoningEffort ? `/${settings.modelReasoningEffort}` : ""}` : "不覆盖模型";
   const speed = settings.speedTier === "fast" ? "快速" : "标准";
   const apply = settings.applyAfterSwitch ? "切换后自动应用" : "仅保存不自动应用";
-  const restart = settings.restartAppServerAfterSwitch ? "切换后重启 app-server" : "不重启 app-server";
+  const restart = settings.restartAppServerAfterSwitch
+    ? `切换后刷新 app-server(${settings.appServerRestartMode})`
+    : "不重启 app-server";
   return `权限 ${settings.sandboxMode || "不覆盖"}，审批 ${settings.approvalPolicy || "不覆盖"}，模型 ${model}，速度 ${speed}，${apply}，${restart}`;
 }

@@ -65,7 +65,7 @@ codex plugin add codex-account-switcher@codex-switcher
 | “切换到余额最多的账号” | 自动选择瓶颈余额最大的账号并切换。 |
 | “把默认访问权限设成工作区可写” | 保存默认权限配置。 |
 | “把默认模型设成智能优先并立即应用” | 保存并写入 `~/.codex/config.toml`。 |
-| “切换账号后自动重启 app-server” | 后续切换时额外尝试重启 app-server daemon。 |
+| “切换账号后自动刷新运行态” | 后续切换时自动刷新 app-server；Codex App 下会尽量避免手动重启。 |
 
 Codex App 插件本身是 skill 插件，不是侧边栏 UI。它会调用本项目构建出的 CLI，所以第一次使用前需要完成上面的 `npm run build` 和 `npm link`。
 
@@ -129,7 +129,7 @@ codex-account-switcher switch --best
   -> account/read(refreshToken=true) 验证
   -> 如 token 被刷新，同步回账号快照
   -> 如启用默认运行配置，写入 ~/.codex/config.toml
-  -> 如启用 app-server 重启，执行 codex app-server daemon restart
+  -> 如启用运行态刷新，自动选择 daemon 或 Codex App app-server 刷新
 ```
 
 需要注意：
@@ -151,10 +151,10 @@ codex-account-switcher defaults set --sandbox workspace-write --approval on-requ
 codex-account-switcher defaults apply
 ```
 
-让后续账号切换后自动尝试重启 app-server daemon：
+让后续账号切换后自动刷新 app-server 运行态：
 
 ```bash
-codex-account-switcher defaults set --restart-app-server-after-switch true
+codex-account-switcher defaults set --restart-app-server-after-switch true --app-server-restart-mode auto
 ```
 
 关闭该行为：
@@ -171,6 +171,7 @@ codex-account-switcher defaults set --no-restart-app-server-after-switch
 | 审批策略 | `untrusted` / `on-request` / `never` | 严格、按需、不请求审批。 |
 | 模型预设 | `speed` / `balanced` / `smart` / `custom` | 速度优先、均衡、智能优先、自定义。 |
 | 速度档 | `standard` / `fast` | `fast` 会写入 `service_tier = "priority"`；`standard` 会移除该默认速度档。 |
+| 运行态刷新 | `auto` / `daemon` / `codex-app` | `auto` 先试 standalone/远程 daemon；失败后在 macOS Codex App 中安排 app-server 子进程约 12 秒后刷新。 |
 
 模型预设默认值：
 
@@ -200,7 +201,7 @@ npm run package:vsix
 - 自动切换到余额最多的账号。
 - 设置默认访问权限、审批策略、模型、reasoning effort 和速度档。
 - 保存默认配置并立即应用。
-- 可选开启切换后重启 app-server daemon。
+- 可选开启切换后自动刷新 app-server 运行态。
 
 Remote SSH 使用时，VS Code 扩展运行在远程服务器上，所以文件选择、账号库、`~/.codex/auth.json` 和 `~/.codex/config.toml` 都属于远程服务器。
 
@@ -219,7 +220,7 @@ codex-account-switcher status
 codex-account-switcher defaults show
 codex-account-switcher defaults preset smart
 codex-account-switcher defaults set --sandbox workspace-write --approval on-request --speed fast
-codex-account-switcher defaults set --restart-app-server-after-switch true
+codex-account-switcher defaults set --restart-app-server-after-switch true --app-server-restart-mode auto
 codex-account-switcher defaults apply
 codex-account-switcher doctor
 ```
@@ -238,6 +239,16 @@ node dist/src/cli.js list
 | `--store <path>` | 指定账号库路径，默认是 `~/.codex/account-switcher`，支持相对路径。 |
 | `--codex-cli <path>` | 指定 Codex CLI 路径。裸命令 `codex` 走 PATH；`./tools/codex` 这类路径支持相对写法。 |
 | `--json` | 输出 JSON，适合脚本处理。 |
+
+运行态刷新参数：
+
+| 参数 | 说明 |
+| --- | --- |
+| `--restart-app-server-after-switch true` | 切换账号后自动刷新 app-server 运行态。 |
+| `--app-server-restart-mode auto` | 默认推荐。先试 daemon；如果 Codex App 不是 standalone install，则安排 macOS Codex App app-server 约 12 秒后刷新。 |
+| `--app-server-restart-mode daemon` | 只用于 standalone/远程 daemon。 |
+| `--app-server-restart-mode codex-app` | 只用于 macOS Codex App。 |
+| `--no-restart-app-server-after-switch` | 关闭自动刷新。 |
 
 示例：对临时 Codex home 操作，不影响真实账号。
 
@@ -264,7 +275,7 @@ codex-account-switcher --codex-home ./tmp/codex-home --store ./tmp/codex-store d
 
 **切换后当前 Codex 对话为什么没有立刻变化？**
 
-运行中的 Codex session 不保证热切换。切换主要保证磁盘 `auth.json`、后续请求或新 session 生效；必要时 reload/restart。你也可以开启 `--restart-app-server-after-switch true`，让工具在切换后尝试重启 app-server daemon。
+运行中的 Codex session 不保证热切换。切换主要保证磁盘 `auth.json`、后续请求或新 session 生效。你可以开启 `--restart-app-server-after-switch true --app-server-restart-mode auto`，让工具在切换后自动刷新 app-server；在 macOS Codex App 下，它会安排 app-server 子进程在本轮命令返回后刷新，通常不需要手动重启整个 App。
 
 **会不会显示 token？**
 

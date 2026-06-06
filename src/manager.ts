@@ -1,11 +1,11 @@
-import { spawn } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { sanitizeError, parseAuthJson, readAuthJson, summarizeAuth, stableAuthHash } from "./auth";
 import { AppServerClient } from "./appServerClient";
+import { refreshAppServerRuntime } from "./appServerRestart";
 import { applyCodexConfigDefaults } from "./codexConfig";
-import { authJsonPath, configTomlPath, resolveCodexCli, resolveCodexHome, resolveInputPath } from "./paths";
+import { authJsonPath, configTomlPath, resolveCodexHome, resolveInputPath } from "./paths";
 import { chooseCodexSnapshot, normalizeRateWindows, pickBestAccount, scoreAccount } from "./rateLimits";
 import { describeSettings } from "./settings";
 import { AccountStore } from "./store";
@@ -142,7 +142,7 @@ export class AccountSwitcher {
       }
       const verification = await this.verifyAndRefreshActiveAccount(account, snapshot);
       const { appliedDefaults, defaultsError } = await this.applyDefaultsAfterSwitch();
-      const appServerDaemonRestart = await this.restartAppServerDaemonAfterSwitch();
+      const appServerDaemonRestart = await this.refreshAppServerRuntimeAfterSwitch();
       const defaultsMessage = appliedDefaults
         ? appliedDefaults.changedKeys.length
           ? "默认运行配置已应用。"
@@ -152,9 +152,11 @@ export class AccountSwitcher {
           : "默认运行配置未启用。";
       const restartMessage = appServerDaemonRestart?.attempted
         ? appServerDaemonRestart.success
-          ? "app-server daemon 已重启。"
-          : "app-server daemon 重启失败。"
-        : "app-server daemon 未重启。";
+          ? appServerDaemonRestart.scheduled
+            ? "Codex App 运行态刷新已安排。"
+            : "app-server 已刷新。"
+          : "app-server 刷新失败。"
+        : "app-server 未刷新。";
       return {
         targetAccountId: account.id,
         previousAccountId: previousKey,
@@ -228,55 +230,12 @@ export class AccountSwitcher {
     }
   }
 
-  private async restartAppServerDaemonAfterSwitch(): Promise<DaemonRestartResult | undefined> {
+  private async refreshAppServerRuntimeAfterSwitch(): Promise<DaemonRestartResult | undefined> {
     const settings = await this.store.getSettings();
     if (!settings.restartAppServerAfterSwitch) {
       return undefined;
     }
-    const cli = resolveCodexCli(this.options);
-    const timeoutMs = this.options.appServerTimeoutMs ?? 15_000;
-    return new Promise((resolve) => {
-      const child = spawn(cli, ["app-server", "daemon", "restart"], {
-        env: { ...process.env, CODEX_HOME: this.codexHome },
-        stdio: "pipe",
-      });
-      let stderr = "";
-      let stdout = "";
-      const timer = setTimeout(() => {
-        child.kill();
-        resolve({
-          attempted: true,
-          success: false,
-          message: "app-server daemon 重启超时。",
-          error: "timeout",
-        });
-      }, timeoutMs);
-      child.stdout.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString("utf8");
-      });
-      child.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString("utf8");
-      });
-      child.on("error", (error) => {
-        clearTimeout(timer);
-        resolve({
-          attempted: true,
-          success: false,
-          message: "无法启动 Codex app-server daemon restart。",
-          error: sanitizeError(error),
-        });
-      });
-      child.on("exit", (code) => {
-        clearTimeout(timer);
-        const output = sanitizeError(`${stdout}\n${stderr}`.trim());
-        resolve({
-          attempted: true,
-          success: code === 0,
-          message: code === 0 ? "app-server daemon 已重启。" : `app-server daemon 重启失败，退出码 ${code ?? "unknown"}。`,
-          error: code === 0 ? undefined : output,
-        });
-      });
-    });
+    return refreshAppServerRuntime(settings.appServerRestartMode, this.codexHome, this.options);
   }
 
   private async refreshOne(account: StoredAccount): Promise<void> {

@@ -8,6 +8,7 @@ import { normalizeRateWindows, pickBestAccount, scoreAccount } from "../src/rate
 import { parseAuthJson, sanitizeError, summarizeAuth } from "../src/auth";
 import { StoredAccount } from "../src/types";
 import { updateTopLevelToml } from "../src/codexConfig";
+import { findCodexAppServerPids } from "../src/appServerRestart";
 
 test("auth parsing rejects malformed auth files", () => {
   assert.throws(() => parseAuthJson("{"), /不是合法 JSON/);
@@ -177,6 +178,16 @@ test("relative codex and store paths resolve from configured baseDir", async () 
   assert.equal(switcher.codexHome, path.join(root, "codex"));
   assert.equal(switcher.store.root, path.join(root, "store"));
   assert.equal(account.sourcePath, authPath);
+});
+
+test("codex app server pid detection skips vscode and temporary stdio servers", () => {
+  const output = [
+    "100 1 /Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled",
+    "101 1 /Users/demo/.vscode/extensions/openai.chatgpt/bin/codex app-server --analytics-default-enabled",
+    "102 100 /Applications/Codex.app/Contents/Resources/codex app-server --listen stdio://",
+    "103 1 /Applications/Codex.app/Contents/MacOS/Codex",
+  ].join("\n");
+  assert.deepEqual(findCodexAppServerPids(output), [100]);
 });
 
 test("sanitizeError redacts common token shapes", () => {

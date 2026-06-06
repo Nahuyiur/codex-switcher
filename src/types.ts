@@ -47,10 +47,13 @@ export type ReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
 
 export type SpeedTier = "standard" | "fast";
 
+export type AppServerRestartMode = "auto" | "daemon" | "codex-app";
+
 export interface SwitcherSettings {
   version: 1;
   applyAfterSwitch: boolean;
   restartAppServerAfterSwitch: boolean;
+  appServerRestartMode: AppServerRestartMode;
   sandboxMode?: SandboxMode;
   approvalPolicy?: ApprovalPolicy;
   modelPreset: ModelPreset;
@@ -63,6 +66,7 @@ export interface SwitcherSettings {
 export interface SwitcherSettingsUpdate {
   applyAfterSwitch?: boolean;
   restartAppServerAfterSwitch?: boolean;
+  appServerRestartMode?: AppServerRestartMode | null;
   sandboxMode?: SandboxMode | null;
   approvalPolicy?: ApprovalPolicy | null;
   modelPreset?: ModelPreset | null;
@@ -81,6 +85,9 @@ export interface DaemonRestartResult {
   attempted: boolean;
   success: boolean;
   message: string;
+  strategy?: AppServerRestartMode | "codex-app-process";
+  scheduled?: boolean;
+  affectedPids?: number[];
   error?: string;
 }
 

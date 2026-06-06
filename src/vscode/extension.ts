@@ -1,7 +1,16 @@
 import * as vscode from "vscode";
 import { AccountSwitcher } from "../manager";
 import { scoreAccount } from "../rateLimits";
-import { describeSettings, isApprovalPolicy, isModelPreset, isReasoningEffort, isSandboxMode, isSpeedTier, KNOWN_MODELS } from "../settings";
+import {
+  describeSettings,
+  isAppServerRestartMode,
+  isApprovalPolicy,
+  isModelPreset,
+  isReasoningEffort,
+  isSandboxMode,
+  isSpeedTier,
+  KNOWN_MODELS,
+} from "../settings";
 import { AccountSummary, ManagerOptions, SwitcherSettings, SwitcherSettingsUpdate } from "../types";
 import { sanitizeError } from "../auth";
 
@@ -296,7 +305,8 @@ class AccountsViewProvider implements vscode.WebviewViewProvider {
         modelReasoningEffort: form.modelReasoningEffort.value,
         speedTier: form.speedTier.value,
         applyAfterSwitch: form.applyAfterSwitch.checked,
-        restartAppServerAfterSwitch: form.restartAppServerAfterSwitch.checked
+        restartAppServerAfterSwitch: form.restartAppServerAfterSwitch.checked,
+        appServerRestartMode: form.appServerRestartMode.value
       };
     }
     document.getElementById('modelPreset')?.addEventListener('change', (event) => {
@@ -354,6 +364,7 @@ function renderSettingsPanel(settings?: SwitcherSettings): string {
     modelReasoningEffort: "medium",
     speedTier: "standard",
     restartAppServerAfterSwitch: false,
+    appServerRestartMode: "auto",
   };
   const models = KNOWN_MODELS.map((model) => `<option value="${escapeHtml(model)}"></option>`).join("");
   return `<div class="section-title"><span>默认运行配置</span><span>${current.applyAfterSwitch ? "自动应用" : "手动应用"}</span></div>
@@ -413,7 +424,15 @@ function renderSettingsPanel(settings?: SwitcherSettings): string {
         </div>
       </div>
       <label class="check"><input type="checkbox" name="applyAfterSwitch" ${current.applyAfterSwitch ? "checked" : ""}>切换账号后应用</label>
-      <label class="check"><input type="checkbox" name="restartAppServerAfterSwitch" ${current.restartAppServerAfterSwitch ? "checked" : ""}>切换后重启 app-server</label>
+      <label class="check"><input type="checkbox" name="restartAppServerAfterSwitch" ${current.restartAppServerAfterSwitch ? "checked" : ""}>切换后刷新运行态</label>
+      <div class="field">
+        <label for="appServerRestartMode">刷新方式</label>
+        <select id="appServerRestartMode" name="appServerRestartMode">
+          ${option("auto", "自动", current.appServerRestartMode)}
+          ${option("daemon", "Daemon", current.appServerRestartMode)}
+          ${option("codex-app", "Codex App", current.appServerRestartMode)}
+        </select>
+      </div>
     </div>
     <div class="settings-actions">
       <button type="button" class="primary" data-command="saveSettings" data-apply-now="true">保存并应用</button>
@@ -454,6 +473,7 @@ function parseSettingsMessage(raw: Record<string, unknown> | undefined): Switche
   const modelPreset = stringValue(raw.modelPreset);
   const modelReasoningEffort = stringValue(raw.modelReasoningEffort);
   const speedTier = stringValue(raw.speedTier);
+  const appServerRestartMode = stringValue(raw.appServerRestartMode);
   if (!isSandboxMode(sandboxMode)) {
     throw new Error("访问权限无效。");
   }
@@ -469,6 +489,9 @@ function parseSettingsMessage(raw: Record<string, unknown> | undefined): Switche
   if (!isSpeedTier(speedTier)) {
     throw new Error("速度档无效。");
   }
+  if (!isAppServerRestartMode(appServerRestartMode)) {
+    throw new Error("app-server 刷新方式无效。");
+  }
   return {
     sandboxMode,
     approvalPolicy,
@@ -478,6 +501,7 @@ function parseSettingsMessage(raw: Record<string, unknown> | undefined): Switche
     speedTier,
     applyAfterSwitch: Boolean(raw.applyAfterSwitch),
     restartAppServerAfterSwitch: Boolean(raw.restartAppServerAfterSwitch),
+    appServerRestartMode,
   };
 }
 

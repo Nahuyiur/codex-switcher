@@ -2,7 +2,15 @@
 import { AccountSwitcher } from "./manager";
 import { formatWindow, scoreAccount } from "./rateLimits";
 import { sanitizeError } from "./auth";
-import { describeSettings, isApprovalPolicy, isModelPreset, isReasoningEffort, isSandboxMode, isSpeedTier } from "./settings";
+import {
+  describeSettings,
+  isAppServerRestartMode,
+  isApprovalPolicy,
+  isModelPreset,
+  isReasoningEffort,
+  isSandboxMode,
+  isSpeedTier,
+} from "./settings";
 import { AppliedCodexConfig, ManagerOptions, SwitcherSettingsUpdate } from "./types";
 
 interface ParsedArgs {
@@ -140,6 +148,13 @@ function readSettingsUpdate(args: ParsedArgs): SwitcherSettingsUpdate {
   if (args.flags["no-restart-app-server-after-switch"]) {
     update.restartAppServerAfterSwitch = false;
   }
+  const appServerRestartMode = stringFlag(args, "app-server-restart-mode");
+  if (appServerRestartMode) {
+    if (!isAppServerRestartMode(appServerRestartMode)) {
+      throw new Error("app-server 刷新模式只能是 auto、daemon 或 codex-app。");
+    }
+    update.appServerRestartMode = appServerRestartMode;
+  }
   const sandboxMode = stringFlag(args, "sandbox");
   if (sandboxMode) {
     if (!isSandboxMode(sandboxMode)) {
@@ -194,8 +209,11 @@ function renderSettings(settings: Awaited<ReturnType<AccountSwitcher["getSetting
   custom   自定义模型名和 reasoning effort
 
 运行态：
-  --restart-app-server-after-switch true   切换后尝试重启 app-server daemon
-  --no-restart-app-server-after-switch     切换后不重启 app-server daemon`;
+  --restart-app-server-after-switch true   切换后自动刷新 app-server 运行态
+  --app-server-restart-mode auto           auto: daemon 失败时刷新 Codex App app-server
+  --app-server-restart-mode daemon         只重启 standalone/远程 daemon
+  --app-server-restart-mode codex-app      只刷新 macOS Codex App app-server
+  --no-restart-app-server-after-switch     切换后不刷新 app-server`;
 }
 
 function renderApplyResult(result: AppliedCodexConfig | null): string {
@@ -266,7 +284,7 @@ function printHelp(): void {
   codex-account-switcher switch --best [--json]
   codex-account-switcher status [--json]
   codex-account-switcher defaults show [--json]
-  codex-account-switcher defaults set [--sandbox read-only|workspace-write|danger-full-access] [--approval untrusted|on-request|never] [--preset speed|balanced|smart|custom] [--model 模型名] [--effort minimal|low|medium|high|xhigh] [--speed standard|fast] [--restart-app-server-after-switch true|false]
+  codex-account-switcher defaults set [--sandbox read-only|workspace-write|danger-full-access] [--approval untrusted|on-request|never] [--preset speed|balanced|smart|custom] [--model 模型名] [--effort minimal|low|medium|high|xhigh] [--speed standard|fast] [--restart-app-server-after-switch true|false] [--app-server-restart-mode auto|daemon|codex-app]
   codex-account-switcher defaults preset speed|balanced|smart|custom
   codex-account-switcher defaults apply [--json]
   codex-account-switcher doctor [--json]
