@@ -2,6 +2,7 @@
 import { AccountSwitcher } from "./manager";
 import { formatWindow, scoreAccount } from "./rateLimits";
 import { sanitizeError } from "./auth";
+import { runSwitchAccountSlashCommand } from "./slashCommand";
 import {
   describeSettings,
   isAppServerRestartMode,
@@ -20,13 +21,21 @@ interface ParsedArgs {
 }
 
 async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
+  const rawArgv = process.argv.slice(2);
+  const rawSlash = readRawSlashCommand(rawArgv);
+  const args = parseArgs(rawArgv);
   const options: ManagerOptions = {
     codexHome: stringFlag(args, "codex-home"),
     accountLibraryPath: stringFlag(args, "store"),
     codexCliPath: stringFlag(args, "codex-cli"),
   };
   const switcher = new AccountSwitcher(options);
+
+  if (rawSlash) {
+    const result = await runSwitchAccountSlashCommand(rawSlash.text, switcher);
+    output({ ...args, flags: { ...args.flags, json: rawSlash.json || args.flags.json } }, result, result.message);
+    return;
+  }
 
   switch (args.command) {
     case "add-current": {
@@ -55,6 +64,11 @@ async function main(): Promise<void> {
     }
     case "switch": {
       const result = args.flags.best ? await switcher.switchBest() : await switcher.switchAccount(args.values[0]);
+      output(args, result, result.message);
+      return;
+    }
+    case "slash": {
+      const result = await runSwitchAccountSlashCommand(rawArgv.slice(1).filter((part) => part !== "--json").join(" "), switcher);
       output(args, result, result.message);
       return;
     }
@@ -250,6 +264,17 @@ function parseArgs(argv: string[]): ParsedArgs {
   return parsed;
 }
 
+function readRawSlashCommand(argv: string[]): { text: string; json: boolean } | undefined {
+  if (argv[0] !== "/switch-account") {
+    return undefined;
+  }
+  const json = argv.includes("--json");
+  return {
+    text: argv.filter((part) => part !== "--json").join(" "),
+    json,
+  };
+}
+
 function stringFlag(args: ParsedArgs, key: string): string | undefined {
   const value = args.flags[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -282,6 +307,8 @@ function printHelp(): void {
   codex-account-switcher refresh-limits --all [--json]
   codex-account-switcher switch <account-id> [--json]
   codex-account-switcher switch --best [--json]
+  codex-account-switcher slash "switch muka2" [--json]
+  codex-account-switcher /switch-account switch muka2 [--json]
   codex-account-switcher status [--json]
   codex-account-switcher defaults show [--json]
   codex-account-switcher defaults set [--sandbox read-only|workspace-write|danger-full-access] [--approval untrusted|on-request|never] [--preset speed|balanced|smart|custom] [--model 模型名] [--effort minimal|low|medium|high|xhigh] [--speed standard|fast] [--restart-app-server-after-switch true|false] [--app-server-restart-mode auto|daemon|codex-app]

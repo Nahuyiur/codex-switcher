@@ -56,6 +56,19 @@ codex plugin add codex-account-switcher@codex-switcher
 
 安装完成后，可以直接在 Codex App 对话里说：
 
+| Slash 写法 | 它会做 |
+| --- | --- |
+| `/switch-account list` | 列出账号和余额。 |
+| `/switch-account refresh` | 刷新所有账号余额。 |
+| `/switch-account best` | 切换到余额最多的账号。 |
+| `/switch-account switch muka2` | 切换到 `muka2`。 |
+| `/switch-account muka2` | 简写，直接切换到 `muka2`。 |
+| `/switch-account 保存当前 主账号` | 把当前 Codex 登录保存为 `主账号`。 |
+| `/switch-account import ./accounts/backup.auth.json 备用账号` | 从 auth 文件导入 `备用账号`。 |
+| `/switch-account auto-refresh` | 开启切换后的自动运行态刷新。 |
+
+也可以使用自然语言：
+
 | 你说 | 它会做 |
 | --- | --- |
 | “把当前 Codex 登录保存成主账号” | 读取当前 `~/.codex/auth.json` 并保存快照。 |
@@ -67,7 +80,7 @@ codex plugin add codex-account-switcher@codex-switcher
 | “把默认模型设成智能优先并立即应用” | 保存并写入 `~/.codex/config.toml`。 |
 | “切换账号后自动刷新运行态” | 后续切换时自动刷新 app-server；Codex App 下会尽量避免手动重启。 |
 
-Codex App 插件本身是 skill 插件，不是侧边栏 UI。它会调用本项目构建出的 CLI，所以第一次使用前需要完成上面的 `npm run build` 和 `npm link`。
+Codex App 插件本身是 skill 插件，不是侧边栏 UI。当前 Codex 插件 manifest 没有可确认的原生 slash-command 声明字段，所以这里的 `/switch-account ...` 是 slash-style 消息入口：新对话加载插件后，Codex 会按 skill 规则调用本项目 CLI 的 `slash` 解析器。
 
 ## 第一次添加账号
 
@@ -216,6 +229,8 @@ codex-account-switcher list
 codex-account-switcher refresh-limits --all
 codex-account-switcher switch <account-id>
 codex-account-switcher switch --best
+codex-account-switcher slash "switch muka2"
+codex-account-switcher /switch-account switch muka2
 codex-account-switcher status
 codex-account-switcher defaults show
 codex-account-switcher defaults preset smart

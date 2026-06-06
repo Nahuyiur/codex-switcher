@@ -2,12 +2,15 @@
 
 Use this skill when the user wants to manage local Codex accounts from Codex App: list saved accounts, import an `auth.json`, save the current account, refresh 5-hour/7-day balances, switch to a selected account, switch to the account with the most remaining balance, or set default Codex permissions/model/speed.
 
+This skill must also be used whenever the user message starts with `/switch-account`. Treat `/switch-account` as the slash-style command entrypoint for this plugin.
+
 ## Workflow
 
 - Prefer the linked CLI command: `codex-account-switcher`.
 - If the linked command is unavailable and the current working directory is this repository after build, use `node dist/src/cli.js`.
 - Keep all user-facing text in Chinese.
 - Never print token values from `auth.json`; if a command errors, summarize the sanitized error only.
+- For any prompt that starts with `/switch-account`, run `codex-account-switcher slash "<text after /switch-account>" --json` and summarize the returned `message`. Example: `/switch-account switch muka2` maps to `codex-account-switcher slash "switch muka2" --json`.
 - For listing accounts, run `codex-account-switcher list --json` and summarize label, active state, 5小时余额, 7天余额, and any error.
 - To save the current account, run `codex-account-switcher add-current --label <名称>`.
 - To import a file, ask for or use the path, then run `codex-account-switcher import --from <path> --label <名称>`.
@@ -24,6 +27,17 @@ Use this skill when the user wants to manage local Codex accounts from Codex App
 - To force macOS Codex App app-server refresh only, run `codex-account-switcher defaults set --restart-app-server-after-switch true --app-server-restart-mode codex-app --json`.
 - To disable runtime refresh after future switches, run `codex-account-switcher defaults set --no-restart-app-server-after-switch --json`.
 - To apply saved defaults immediately, run `codex-account-switcher defaults apply --json`.
+
+## Slash-style examples
+
+- `/switch-account list` lists saved accounts and balances.
+- `/switch-account refresh` refreshes all balances.
+- `/switch-account best` switches to the account with the most remaining balance.
+- `/switch-account switch muka2` switches to account label/id/email `muka2`.
+- `/switch-account muka2` is shorthand for switching to `muka2`.
+- `/switch-account 保存当前 主账号` saves the current Codex login as `主账号`.
+- `/switch-account import ./accounts/backup.auth.json 备用账号` imports an auth file.
+- `/switch-account auto-refresh` enables automatic runtime refresh after future switches.
 
 ## Notes
 

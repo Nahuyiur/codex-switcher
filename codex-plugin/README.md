@@ -13,6 +13,9 @@ npm run build
 
 安装后可以直接在 Codex App 里说：
 
+- “/switch-account list”
+- “/switch-account switch muka2”
+- “/switch-account best”
 - “列出 Codex 账号”
 - “从 `./accounts/backup.auth.json` 导入一个账号”
 - “切换到余额最多的账号”

@@ -19,9 +19,9 @@
     "capabilities": ["Interactive", "Write"],
     "websiteURL": "https://openai.com/",
     "defaultPrompt": [
-      "列出我的 Codex 账号余额",
-      "把当前 Codex 登录保存成一个账号",
-      "切换到 Codex 余额最多的账号"
+      "/switch-account list",
+      "/switch-account switch muka2",
+      "/switch-account best"
     ],
     "brandColor": "#2563EB",
     "screenshots": []

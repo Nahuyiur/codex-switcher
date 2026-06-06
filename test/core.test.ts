@@ -9,6 +9,7 @@ import { parseAuthJson, sanitizeError, summarizeAuth } from "../src/auth";
 import { StoredAccount } from "../src/types";
 import { updateTopLevelToml } from "../src/codexConfig";
 import { findCodexAppServerPids } from "../src/appServerRestart";
+import { runSwitchAccountSlashCommand, stripCommandName } from "../src/slashCommand";
 
 test("auth parsing rejects malformed auth files", () => {
   assert.throws(() => parseAuthJson("{"), /不是合法 JSON/);
@@ -178,6 +179,28 @@ test("relative codex and store paths resolve from configured baseDir", async () 
   assert.equal(switcher.codexHome, path.join(root, "codex"));
   assert.equal(switcher.store.root, path.join(root, "store"));
   assert.equal(account.sourcePath, authPath);
+});
+
+test("slash command switches by account label", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-switcher-slash-test-"));
+  const codexHome = path.join(root, "codex");
+  const store = path.join(root, "store");
+  await fs.mkdir(codexHome, { recursive: true });
+  const first = path.join(root, "alpha.auth.json");
+  const second = path.join(root, "beta.auth.json");
+  await fs.writeFile(first, JSON.stringify({ tokens: { access_token: "a", refresh_token: "ra", account_id: "alpha" } }), "utf8");
+  await fs.writeFile(second, JSON.stringify({ tokens: { access_token: "b", refresh_token: "rb", account_id: "beta" } }), "utf8");
+  await fs.copyFile(first, path.join(codexHome, "auth.json"));
+
+  const switcher = new AccountSwitcher({ codexHome, accountLibraryPath: store, codexCliPath: "/missing/codex", appServerTimeoutMs: 25 });
+  await switcher.importAuth(first, "alpha");
+  await switcher.importAuth(second, "beta");
+
+  const result = await runSwitchAccountSlashCommand("/switch-account switch beta", switcher);
+  assert.equal(result.action, "switch");
+  assert.match(await fs.readFile(path.join(codexHome, "auth.json"), "utf8"), /beta/);
+  assert.equal((await switcher.status())?.label, "beta");
+  assert.equal(stripCommandName("/switch-account list"), "list");
 });
 
 test("codex app server pid detection skips vscode and temporary stdio servers", () => {
