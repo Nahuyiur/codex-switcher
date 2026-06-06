@@ -1,49 +1,53 @@
 # Codex 账号切换器
 
-Use this skill when the user wants to manage local Codex accounts from Codex App: list saved accounts, import an `auth.json`, save the current account, refresh 5-hour/7-day balances, switch to a selected account, switch to the account with the most remaining balance, or set default Codex permissions/model/speed.
+当用户要在 Codex App 管理本机 Codex 账号时使用本 skill：保存当前登录、导入 `auth.json`、列出账号、刷新 5 小时/7 天余额、切换指定账号、切到余额最佳账号、查看或设置默认权限/审批/模型/智能档/速度档，以及切换后运行态刷新。
 
-This skill must also be used whenever the user message starts with `/switch-account`. Treat `/switch-account` as the slash-style command entrypoint for this plugin.
+`/switch-account` 是本插件的斜杠风格消息入口，不是已确认的 Codex App 原生 autocomplete 命令。只要用户消息以 `/switch-account` 开头，就按本 skill 处理；不要承诺它会出现在 App 自动补全列表里。
 
-## Workflow
+## 执行规则
 
-- Prefer the linked CLI command: `codex-account-switcher`.
-- If the linked command is unavailable and the current working directory is this repository after build, use `node dist/src/cli.js`.
-- Keep all user-facing text in Chinese.
-- Never print token values from `auth.json`; if a command errors, summarize the sanitized error only.
-- For any prompt that starts with `/switch-account`, run `codex-account-switcher slash "<text after /switch-account>" --json` and summarize the returned `message`. Example: `/switch-account switch muka2` maps to `codex-account-switcher slash "switch muka2" --json`.
-- For listing accounts, run `codex-account-switcher list --json` and summarize label, active state, 5小时余额, 7天余额, and any error.
-- To save the current account, run `codex-account-switcher add-current --label <名称>`.
-- To import a file, ask for or use the path, then run `codex-account-switcher import --from <path> --label <名称>`.
-- Relative paths are supported; interpret them relative to the current conversation working directory.
-- To refresh balances, run `codex-account-switcher refresh-limits --all --json`.
-- To switch to a specific account, run `codex-account-switcher switch <account-id> --json` and report `diskAuthWritten`, `verified`, `refreshedAuthSnapshot`, `appServerDaemonRestart.strategy`, `appServerDaemonRestart.scheduled`, and whether reload/restart may still be needed.
-- To switch automatically, run `codex-account-switcher switch --best --json`.
-- To show default runtime settings, run `codex-account-switcher defaults show --json`.
-- To set the permission preset, use `codex-account-switcher defaults set --sandbox read-only|workspace-write|danger-full-access --json`.
-- To set model behavior quickly, use `codex-account-switcher defaults preset speed|balanced|smart|custom --json`.
-- To set custom model settings, use `codex-account-switcher defaults set --model <model> --effort minimal|low|medium|high|xhigh --speed standard|fast --json`.
-- To enable automatic runtime refresh after future switches, run `codex-account-switcher defaults set --restart-app-server-after-switch true --app-server-restart-mode auto --json`.
-- To force standalone/remote daemon restart only, run `codex-account-switcher defaults set --restart-app-server-after-switch true --app-server-restart-mode daemon --json`.
-- To force macOS Codex App app-server refresh only, run `codex-account-switcher defaults set --restart-app-server-after-switch true --app-server-restart-mode codex-app --json`.
-- To disable runtime refresh after future switches, run `codex-account-switcher defaults set --no-restart-app-server-after-switch --json`.
-- To apply saved defaults immediately, run `codex-account-switcher defaults apply --json`.
+- 优先使用已链接的 `codex-account-switcher`；如果不可用且当前在本仓库构建后目录，用 `node dist/src/cli.js`。
+- 面向用户的回复保持中文。
+- 不要打印 `auth.json` 里的 token；报错只总结清洗后的错误。
+- 相对路径按当前对话工作目录解释。
+- 用户以 `/switch-account` 开头时，首选运行 `codex-account-switcher /switch-account <子命令...> --json`，总结返回的 `message`。例如 `/switch-account switch muka2` 对应 `codex-account-switcher /switch-account switch muka2 --json`。
+- 如果 shell 或调用环境不方便传递 `/switch-account` 这个参数，可以退回兼容形式：`codex-account-switcher slash "<去掉 /switch-account 后的文本>" --json`。
 
-## Slash-style examples
+## 能力映射
 
-- `/switch-account list` lists saved accounts and balances.
-- `/switch-account refresh` refreshes all balances.
-- `/switch-account best` switches to the account with the most remaining balance.
-- `/switch-account switch muka2` switches to account label/id/email `muka2`.
-- `/switch-account muka2` is shorthand for switching to `muka2`.
-- `/switch-account 保存当前 主账号` saves the current Codex login as `主账号`.
-- `/switch-account import ./accounts/backup.auth.json 备用账号` imports an auth file.
-- `/switch-account auto-refresh` enables automatic runtime refresh after future switches.
+- 列出账号：`codex-account-switcher list --json`，总结标签、当前状态、5 小时余额、7 天余额和错误。
+- 保存当前：`codex-account-switcher add-current --label <名称>`。
+- 导入账号：`codex-account-switcher import --from <path> --label <名称>`。
+- 刷新余额：`codex-account-switcher refresh-limits --all --json`。
+- 切换账号：`codex-account-switcher switch <account-id> --json`，说明是否写入磁盘、验证、同步刷新后快照、是否安排 app-server 刷新，以及是否还需要 reload/restart。
+- 最佳账号：`codex-account-switcher switch --best --json`。
+- 默认配置查看：`codex-account-switcher defaults show --json`。
+- 默认权限/审批：`codex-account-switcher defaults set --sandbox read-only|workspace-write|danger-full-access --json`；审批用 `--approval untrusted|on-request|never`。
+- 默认模型预设：`codex-account-switcher defaults preset speed|balanced|smart|custom --json`。
+- 默认模型细项：`codex-account-switcher defaults set --model <model> --effort minimal|low|medium|high|xhigh --speed standard|fast --json`。
+- 切换后自动刷新运行态：`codex-account-switcher defaults set --restart-app-server-after-switch true --app-server-restart-mode auto|daemon|codex-app --json`。
+- 关闭自动刷新：`codex-account-switcher defaults set --no-restart-app-server-after-switch --json`。
+- 立即应用默认配置：`codex-account-switcher defaults apply --json`。
 
-## Notes
+## `/switch-account` 示例
 
-- Switching writes the selected snapshot to the target machine's `~/.codex/auth.json`.
-- Switching verifies with `account/read(refreshToken=true)`; if Codex refreshes auth during verification, the refreshed `auth.json` is synced back into the saved account snapshot.
-- If enabled, switching also writes saved defaults to `~/.codex/config.toml` for `sandbox_mode`, `approval_policy`, `model`, `model_reasoning_effort`, and `service_tier`.
-- If enabled in `auto` mode, switching first tries `codex app-server daemon restart`; if the desktop app is not a standalone install, macOS Codex App app-server refresh is scheduled about 12 seconds after the CLI returns so the assistant can report the result first.
-- Running Codex turns may briefly reconnect when the app-server refresh is scheduled. If a loaded turn still does not see the new auth, start a new turn/thread.
-- In VS Code Remote SSH, use the VS Code extension instead; it runs on the remote extension host and operates on the remote `~/.codex`.
+- `/switch-account list`：列出账号和余额。
+- `/switch-account refresh`：刷新所有账号余额。
+- `/switch-account best`：切换到余额最多的账号。
+- `/switch-account switch muka2`：切换到标签/id/email 匹配 `muka2` 的账号。
+- `/switch-account muka2`：简写，直接切换到 `muka2`。
+- `/switch-account status`：查看当前账号是否已保存在账号库。
+- `/switch-account 保存当前 主账号`：把当前 Codex 登录保存为 `主账号`。
+- `/switch-account import ./accounts/backup.auth.json 备用账号`：导入 auth 文件。
+- `/switch-account auto-refresh`：开启切换后的自动运行态刷新。
+- `/switch-account 关闭自动刷新运行态`：关闭切换后的自动运行态刷新。
+- `/switch-account help`：显示 slash-style 帮助。
+
+## 注意
+
+- 切换会把目标账号快照写入目标机器的 `~/.codex/auth.json`。
+- 切换后会用 `account/read(refreshToken=true)` 验证；如果验证过程中 auth 被刷新，会同步回账号快照。
+- 开启默认配置后，切换也会写 `~/.codex/config.toml` 里的 `sandbox_mode`、`approval_policy`、`model`、`model_reasoning_effort` 和 `service_tier`。
+- 开启 `auto` 运行态刷新后，会先尝试 `codex app-server daemon restart`；macOS Codex App 场景下可能在命令返回约 12 秒后安排 app-server 刷新。
+- 运行中的 Codex turn 可能短暂重连；如果当前 turn 仍看不到新 auth，建议开新 turn/thread。
+- VS Code Remote SSH 场景优先用 VS Code 扩展，它运行在远程 extension host，操作远程 `~/.codex`。

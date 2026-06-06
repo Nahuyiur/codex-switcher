@@ -5,7 +5,7 @@
 <h1 align="center">Codex 账号切换器</h1>
 
 <p align="center">
-  管理多个 Codex <code>auth.json</code> 快照，查看 5 小时 / 7 天余额，并快速切换到指定账号或余额最多的账号。
+  在 Codex App 里用 <code>/switch-account</code> 管理多个 Codex <code>auth.json</code> 快照，查看 5 小时 / 7 天余额，并快速切换到指定账号或余额最多的账号。
 </p>
 
 <p align="center">
@@ -15,7 +15,7 @@
   <img alt="Entrypoints" src="https://img.shields.io/badge/%E5%85%A5%E5%8F%A3-Codex%20App%20%7C%20VS%20Code%20%7C%20CLI-16a34a?style=flat-square">
 </p>
 
-## 适合谁
+## 一句话
 
 如果你有多个 Codex 账号，或者经常在本机 Codex App、VS Code Remote SSH、远程服务器之间切换账号，这个工具可以把“手动复制 `~/.codex/auth.json`”变成一个可验证、可回滚、可自动选择的流程。
 
@@ -27,15 +27,34 @@
 | 自动选择 | 按 `min(5小时余额, 7天余额)` 选择瓶颈余额最大的账号。 |
 | 默认配置 | 切换账号后自动恢复访问权限、审批策略、模型、智能档和速度档。 |
 
-## 三种入口
+## 入口总览
 
 | 入口 | 推荐场景 | 体验 |
 | --- | --- | --- |
-| **Codex App 插件** | 你主要在 Codex App 里使用 | 直接对 Codex 说中文命令，例如“切换到余额最多的账号”。 |
+| **Codex App 插件** | 你主要在 Codex App 里使用 | 直接发 `/switch-account list`、`/switch-account switch muka2`，也支持中文自然语言。 |
 | **VS Code 扩展** | 本机 VS Code 或 Remote SSH | Activity Bar 侧栏、状态栏、账号列表、余额条和默认配置面板。 |
 | **CLI** | 自动化、脚本、调试 | `codex-account-switcher switch --best` 这类命令式入口。 |
 
 工具只操作当前机器上的 Codex 配置。VS Code Remote SSH 中使用时，扩展运行在远程 extension host，因此修改的是远程服务器的 `~/.codex/auth.json` 和 `~/.codex/config.toml`，不会自动同步本机账号。
+
+## Codex App 常用命令
+
+安装完成后，在 Codex App 对话里直接发：
+
+```text
+/switch-account 保存当前 主账号
+/switch-account import ./accounts/backup.auth.json 备用账号
+/switch-account list
+/switch-account switch muka2
+/switch-account best
+/switch-account refresh
+/switch-account status
+/switch-account auto-refresh
+/switch-account 关闭自动刷新运行态
+/switch-account help
+```
+
+第一次使用时先保存或导入账号；之后如果你只记一条，`/switch-account best` 会自动选择 `min(5小时余额, 7天余额)` 最大的账号并切换。
 
 ## 最快开始：Codex App 插件
 
@@ -54,7 +73,9 @@ codex plugin marketplace add Nahuyiur/codex-switcher --ref main
 codex plugin add codex-account-switcher@codex-switcher
 ```
 
-安装完成后，可以直接在 Codex App 对话里说：
+如果之前已经安装过旧版本，仍然按上面命令重新构建、`npm link` 并重新 `codex plugin add`。更新 skill 后建议开一个新的 Codex 对话再使用 `/switch-account ...`，旧对话可能已经加载了旧版插件说明。
+
+安装完成后，可以直接在 Codex App 对话里说。推荐先用 slash-style 写法，语义更稳定：
 
 | Slash 写法 | 它会做 |
 | --- | --- |
@@ -63,11 +84,14 @@ codex plugin add codex-account-switcher@codex-switcher
 | `/switch-account best` | 切换到余额最多的账号。 |
 | `/switch-account switch muka2` | 切换到 `muka2`。 |
 | `/switch-account muka2` | 简写，直接切换到 `muka2`。 |
+| `/switch-account status` | 查看当前账号是否在账号库中。 |
 | `/switch-account 保存当前 主账号` | 把当前 Codex 登录保存为 `主账号`。 |
 | `/switch-account import ./accounts/backup.auth.json 备用账号` | 从 auth 文件导入 `备用账号`。 |
 | `/switch-account auto-refresh` | 开启切换后的自动运行态刷新。 |
+| `/switch-account 关闭自动刷新运行态` | 关闭切换后的自动运行态刷新。 |
+| `/switch-account help` | 显示 slash-style 帮助。 |
 
-也可以使用自然语言：
+也可以使用中文自然语言：
 
 | 你说 | 它会做 |
 | --- | --- |
@@ -80,7 +104,7 @@ codex plugin add codex-account-switcher@codex-switcher
 | “把默认模型设成智能优先并立即应用” | 保存并写入 `~/.codex/config.toml`。 |
 | “切换账号后自动刷新运行态” | 后续切换时自动刷新 app-server；Codex App 下会尽量避免手动重启。 |
 
-Codex App 插件本身是 skill 插件，不是侧边栏 UI。当前 Codex 插件 manifest 没有可确认的原生 slash-command 声明字段，所以这里的 `/switch-account ...` 是 slash-style 消息入口：新对话加载插件后，Codex 会按 skill 规则调用本项目 CLI 的 `slash` 解析器。
+Codex App 插件本身是 skill 插件，不是侧边栏 UI。当前 Codex 插件 manifest 没有可确认的原生 slash-command 声明字段，所以这里的 `/switch-account ...` 是 slash-style 消息入口：新对话加载插件后，Codex 会按 skill 规则调用本项目 CLI 的 `slash` 解析器。它不一定出现在 Codex 内置 slash 自动补全里，但直接发这类消息可以触发插件能力。
 
 ## 第一次添加账号
 
@@ -229,8 +253,10 @@ codex-account-switcher list
 codex-account-switcher refresh-limits --all
 codex-account-switcher switch <account-id>
 codex-account-switcher switch --best
-codex-account-switcher slash "switch muka2"
+codex-account-switcher /switch-account list
 codex-account-switcher /switch-account switch muka2
+codex-account-switcher /switch-account best
+codex-account-switcher slash "switch muka2"
 codex-account-switcher status
 codex-account-switcher defaults show
 codex-account-switcher defaults preset smart
@@ -254,6 +280,16 @@ node dist/src/cli.js list
 | `--store <path>` | 指定账号库路径，默认是 `~/.codex/account-switcher`，支持相对路径。 |
 | `--codex-cli <path>` | 指定 Codex CLI 路径。裸命令 `codex` 走 PATH；`./tools/codex` 这类路径支持相对写法。 |
 | `--json` | 输出 JSON，适合脚本处理。 |
+
+终端里调试 Codex App 同款 slash-style 入口时，首推直接形式：
+
+```bash
+codex-account-switcher /switch-account list --json
+codex-account-switcher /switch-account switch muka2 --json
+codex-account-switcher /switch-account best --json
+```
+
+`codex-account-switcher slash "switch muka2"` 是兼容形式，主要给 skill 内部或 shell 转义不方便时使用。
 
 运行态刷新参数：
 

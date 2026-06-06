@@ -184,19 +184,24 @@ function slashHelpText(): string {
 /switch-account best
 /switch-account switch <账号名>
 /switch-account <账号名>
+/switch-account status
 /switch-account 保存当前 <名称>
 /switch-account import <auth.json路径> <名称>
-/switch-account auto-refresh`;
+/switch-account auto-refresh
+/switch-account 关闭自动刷新运行态
+/switch-account help`;
 }
 
 function slashExamples(): string[] {
   return [
+    "/switch-account 保存当前 主账号",
     "/switch-account list",
     "/switch-account switch muka2",
     "/switch-account best",
+    "/switch-account status",
     "/switch-account import ./accounts/backup.auth.json 备用账号",
-    "/switch-account 保存当前 主账号",
     "/switch-account auto-refresh",
+    "/switch-account 关闭自动刷新运行态",
   ];
 }
 
