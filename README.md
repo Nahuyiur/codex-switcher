@@ -12,7 +12,7 @@
   <a href="https://github.com/Nahuyiur/codex-switcher"><img alt="GitHub" src="https://img.shields.io/badge/GitHub-Nahuyiur%2Fcodex--switcher-24292f?style=flat-square"></a>
   <img alt="Language" src="https://img.shields.io/badge/UI-%E4%B8%AD%E6%96%87-2563eb?style=flat-square">
   <img alt="TypeScript" src="https://img.shields.io/badge/Core-TypeScript-3178c6?style=flat-square">
-  <img alt="Entrypoints" src="https://img.shields.io/badge/%E5%85%A5%E5%8F%A3-Codex%20App%20%7C%20VS%20Code%20%7C%20CLI-16a34a?style=flat-square">
+  <img alt="Entrypoints" src="https://img.shields.io/badge/%E5%85%A5%E5%8F%A3-%2Fswitch--account%20%7C%20VS%20Code-16a34a?style=flat-square">
 </p>
 
 ## 一句话
@@ -33,7 +33,7 @@
 | --- | --- | --- |
 | **Codex App 插件** | 你主要在 Codex App 里使用 | 直接发 `/switch-account list`、`/switch-account switch muka2`，也支持中文自然语言。 |
 | **VS Code 扩展** | 本机 VS Code 或 Remote SSH | Activity Bar 侧栏、状态栏、账号列表、余额条和默认配置面板。 |
-| **CLI** | 自动化、脚本、调试 | 终端里运行 `codex-account-switcher /switch-account best`。 |
+| **自动化能力** | 脚本、调试、插件内部调用 | 仍然复用同一套 `/switch-account ...` 解析器，普通用户不需要记底层二进制前缀。 |
 
 工具只操作当前机器上的 Codex 配置。VS Code Remote SSH 中使用时，扩展运行在远程 extension host，因此修改的是远程服务器的 `~/.codex/auth.json` 和 `~/.codex/config.toml`，不会自动同步本机账号。
 
@@ -62,7 +62,7 @@
 
 ## 最快开始：Codex App 插件
 
-本地 checkout 开发或测试时，在仓库根目录安装依赖、构建 CLI，并把 `codex-account-switcher` 链接到本机 PATH：
+本地 checkout 开发或测试时，在仓库根目录安装依赖、构建，并把底层可执行文件链接到本机 PATH。后续日常使用仍然只在 Codex App 里发 `/switch-account ...`：
 
 ```bash
 npm install
@@ -70,7 +70,7 @@ npm run build
 npm link
 ```
 
-安装 Codex 插件。使用本地 checkout 时，可以把当前目录作为 marketplace 来源：
+安装 Codex 插件。下面是 Codex 插件安装命令，其中 `codex-account-switcher@codex-switcher` 是插件包名，不是日常换号命令。使用本地 checkout 时，可以把当前目录作为 marketplace 来源：
 
 ```bash
 codex plugin marketplace add .
@@ -99,7 +99,7 @@ codex plugin remove codex-account-switcher@codex-switcher
 codex plugin add codex-account-switcher@codex-switcher
 ```
 
-更新 skill 后建议开一个新的 Codex 对话再使用 `/switch-account ...`，旧对话可能已经加载了旧版插件说明。也建议确认 `codex-account-switcher --help` 在 Codex App 可用的 shell 环境中能运行。
+更新 skill 后建议开一个新的 Codex 对话再使用 `/switch-account ...`，旧对话可能已经加载了旧版插件说明。可以在新对话里发 `/switch-account help` 验证插件说明是否已经生效。
 
 安装完成后，可以直接在 Codex App 对话里说。推荐先用斜杠写法，语义更稳定：
 
@@ -136,7 +136,7 @@ codex plugin add codex-account-switcher@codex-switcher
 | `/switch-account 应用默认配置` | 写入 `~/.codex/config.toml`。 |
 | `/switch-account auto-refresh` | 后续切换时自动刷新 app-server；Codex App 下会尽量避免手动重启。 |
 
-Codex App 插件本身是 skill 插件，不是侧边栏 UI。当前 Codex 插件 manifest 没有可确认的原生 slash-command 声明字段，所以这里的 `/switch-account ...` 是斜杠风格消息入口，不是 Codex App 原生命令。新对话加载插件后，Codex 应按 skill 规则处理这类消息；如果没有触发，请明确说“使用 Codex 账号切换器执行 /switch-account list”，或在终端运行对应 CLI。
+Codex App 插件本身是 skill 插件，不是侧边栏 UI。当前 Codex 插件 manifest 没有可确认的原生 slash-command 声明字段，所以这里的 `/switch-account ...` 是斜杠风格消息入口，不是 Codex App 原生命令。新对话加载插件后，Codex 应按 skill 规则处理这类消息；如果没有触发，请明确说“使用 Codex 账号切换器执行 /switch-account list”。
 
 ## 第一次添加账号
 
@@ -291,69 +291,37 @@ npm run package:vsix
 
 Remote SSH 使用时，VS Code 扩展运行在远程服务器上，所以文件选择、账号库、`~/.codex/auth.json` 和 `~/.codex/config.toml` 都属于远程服务器。
 
-## CLI
+## 自动化和调试
 
-CLI 是自动化、调试和脚本入口。普通 Codex App 用户优先使用上面的 `/switch-account ...` 对话命令即可。
+普通使用时不要加任何底层二进制前缀，所有面向人的账号切换命令都写成 `/switch-account ...`。例如：
 
-如果已经运行过 `npm link`，终端里也可以直接调试同一套斜杠入口：
-
-```bash
-codex-account-switcher /switch-account 保存当前 主账号
-codex-account-switcher /switch-account import ../codex-auths/backup.auth.json 备用账号
-codex-account-switcher /switch-account list
-codex-account-switcher /switch-account switch muka2
-codex-account-switcher /switch-account best
-codex-account-switcher /switch-account status
-codex-account-switcher /switch-account defaults preset smart
-codex-account-switcher /switch-account defaults set --sandbox workspace-write --approval on-request --speed fast
-codex-account-switcher /switch-account defaults set --model gpt-5.5 --effort xhigh --speed fast
-codex-account-switcher /switch-account defaults apply
-codex-account-switcher /switch-account auto-refresh
+```text
+/switch-account 保存当前 主账号
+/switch-account import ../codex-auths/backup.auth.json 备用账号
+/switch-account list
+/switch-account refresh
+/switch-account switch muka2
+/switch-account best
+/switch-account status
+/switch-account defaults show
+/switch-account defaults preset smart
+/switch-account defaults set --sandbox workspace-write --approval on-request --speed fast
+/switch-account defaults set --model gpt-5.5 --effort xhigh --speed fast
+/switch-account defaults set --restart-app-server-after-switch true --app-server-restart-mode auto
+/switch-account defaults apply
+/switch-account auto-refresh
+/switch-account 关闭自动刷新运行态
+/switch-account help
 ```
 
-传统子命令仍然保留，适合脚本里按功能拆开调用：
-
-```bash
-codex-account-switcher add-current --label 主账号
-codex-account-switcher import --from ../codex-auths/backup.auth.json --label 备用账号
-codex-account-switcher list
-codex-account-switcher refresh-limits --all
-codex-account-switcher switch <account-id>
-codex-account-switcher switch --best
-codex-account-switcher defaults show
-codex-account-switcher defaults preset smart
-codex-account-switcher defaults set --sandbox workspace-write --approval on-request --speed fast
-codex-account-switcher defaults set --restart-app-server-after-switch true --app-server-restart-mode auto
-codex-account-switcher defaults apply
-codex-account-switcher status
-codex-account-switcher doctor
-```
-
-不想全局链接时，也可以在仓库根目录使用：
-
-```bash
-node dist/src/cli.js /switch-account list
-```
-
-常用参数：
+开发者如果要做脚本集成，可以调用项目底层 CLI，但 README 不再把底层二进制前缀作为用户命令展示，避免在 Codex App 对话里复制错入口。脚本可用的选项和 slash 写法共用同一套解析逻辑：
 
 | 参数 | 说明 |
 | --- | --- |
 | `--codex-home <path>` | 指定目标 Codex home，默认是 `~/.codex`，支持相对路径。 |
 | `--store <path>` | 指定账号库路径，默认是 `~/.codex/account-switcher`，支持相对路径。 |
-| `--codex-cli <path>` | 指定 Codex CLI 路径。裸命令 `codex` 走 PATH；`./tools/codex` 这类路径支持相对写法。 |
+| `--codex-cli <path>` | 指定 Codex CLI 路径。裸命令走 PATH；`./tools/codex` 这类路径支持相对写法。 |
 | `--json` | 输出 JSON，适合脚本处理；可能包含 `sourcePath`、`backupPath`、`codexHome` 这类本机路径元数据，但不会包含 token。 |
-
-需要 JSON 时，在任一斜杠入口终端命令后加 `--json`：
-
-```bash
-codex-account-switcher /switch-account list --json
-codex-account-switcher /switch-account switch muka2 --json
-codex-account-switcher /switch-account best --json
-codex-account-switcher /switch-account defaults show --json
-```
-
-`codex-account-switcher slash "switch muka2"` 是旧版兼容形式，主要用于 shell 转义不方便或兼容旧脚本。
 
 运行态刷新参数：
 
@@ -365,11 +333,7 @@ codex-account-switcher /switch-account defaults show --json
 | `--app-server-restart-mode codex-app` | 只用于 macOS Codex App。 |
 | `--no-restart-app-server-after-switch` | 关闭自动刷新。 |
 
-示例：对临时 Codex home 操作，不影响真实账号。
-
-```bash
-codex-account-switcher --codex-home ./tmp/codex-home --store ./tmp/codex-store /switch-account defaults show --json
-```
+示例：需要对临时 Codex home 调试时，可以在脚本里传 `--codex-home ./tmp/codex-home --store ./tmp/codex-store`，避免影响真实账号。
 
 ## 文件写入边界
 
@@ -413,7 +377,7 @@ npm run package:vsix
 
 常用本地检查：
 
-```bash
-codex-account-switcher --help
-codex-account-switcher /switch-account defaults show
+```text
+/switch-account help
+/switch-account defaults show
 ```

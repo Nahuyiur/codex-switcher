@@ -1,6 +1,6 @@
 # Codex 账号切换器插件
 
-这个目录是 Codex App 插件包。安装后，Codex 会按 `skills/account-switcher/SKILL.md` 调用本项目构建出的 CLI，帮你管理本机 Codex 账号。
+这个目录是 Codex App 插件包。安装后，Codex 会按 `skills/account-switcher/SKILL.md` 调用本项目的本地解析器，帮你管理本机 Codex 账号。
 
 先在仓库根目录运行：
 

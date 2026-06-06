@@ -325,35 +325,25 @@ function booleanFlag(args: ParsedArgs, key: string): boolean | undefined {
 function printHelp(): void {
   process.stdout.write(`Codex 账号切换器
 
-用法:
-  codex-account-switcher /switch-account 保存当前 主账号 [--json]
-  codex-account-switcher /switch-account import ../codex-auths/backup.auth.json 备用账号 [--json]
-  codex-account-switcher /switch-account list [--json]
-  codex-account-switcher /switch-account refresh [--json]
-  codex-account-switcher /switch-account switch muka2 [--json]
-  codex-account-switcher /switch-account best [--json]
-  codex-account-switcher /switch-account status [--json]
-  codex-account-switcher /switch-account auto-refresh [--json]
-  codex-account-switcher /switch-account defaults show [--json]
-  codex-account-switcher /switch-account defaults preset smart [--json]
-  codex-account-switcher /switch-account defaults set --sandbox workspace-write --approval on-request --speed fast [--json]
-  codex-account-switcher /switch-account defaults set --model gpt-5.5 --effort xhigh --speed fast [--json]
-  codex-account-switcher /switch-account defaults apply [--json]
+在 Codex App 对话里发送:
+  /switch-account 保存当前 主账号
+  /switch-account import ../codex-auths/backup.auth.json 备用账号
+  /switch-account list
+  /switch-account refresh
+  /switch-account switch muka2
+  /switch-account best
+  /switch-account status
+  /switch-account auto-refresh
+  /switch-account 关闭自动刷新运行态
+  /switch-account defaults show
+  /switch-account defaults preset smart
+  /switch-account defaults set --sandbox workspace-write --approval on-request --speed fast
+  /switch-account defaults set --model gpt-5.5 --effort xhigh --speed fast
+  /switch-account defaults apply
+  /switch-account help
 
-传统子命令:
-  codex-account-switcher add-current [--label 名称]
-  codex-account-switcher import --from /path/to/auth.json [--label 名称]
-  codex-account-switcher list [--json]
-  codex-account-switcher refresh-limits --all [--json]
-  codex-account-switcher switch <account-id> [--json]
-  codex-account-switcher switch --best [--json]
-  codex-account-switcher slash "switch muka2" [--json]
-  codex-account-switcher status [--json]
-  codex-account-switcher defaults show [--json]
-  codex-account-switcher defaults set [--sandbox read-only|workspace-write|danger-full-access] [--approval untrusted|on-request|never] [--preset speed|balanced|smart|custom] [--model 模型名] [--effort minimal|low|medium|high|xhigh] [--speed standard|fast] [--restart-app-server-after-switch true|false] [--app-server-restart-mode auto|daemon|codex-app]
-  codex-account-switcher defaults preset speed|balanced|smart|custom
-  codex-account-switcher defaults apply [--json]
-  codex-account-switcher doctor [--json]
+开发者说明:
+  底层 CLI 仍支持脚本调用和 JSON 输出，但面向用户的复制命令统一使用 /switch-account ...。
 
 通用参数:
   --codex-home <path>   指定目标 CODEX_HOME，支持 ~ 和相对路径

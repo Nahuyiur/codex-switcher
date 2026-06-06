@@ -6,28 +6,29 @@
 
 ## 执行规则
 
-- 优先使用已链接的 `codex-account-switcher`；如果不可用且当前在本仓库构建后目录，用 `node dist/src/cli.js`。
+- 优先使用本仓库 `package.json` 里 `bin` 字段对应的已链接可执行文件；如果不可用且当前在本仓库构建后目录，可直接运行构建后的 CLI 文件。
 - 面向用户的回复保持中文。
 - 不要打印 `auth.json` 里的 token；报错只总结清洗后的错误。
 - 相对路径按当前对话工作目录解释。
-- 用户以 `/switch-account` 开头时，首选运行 `codex-account-switcher /switch-account <子命令...> --json`，总结返回的 `message`。例如 `/switch-account switch muka2` 对应 `codex-account-switcher /switch-account switch muka2 --json`。
-- 如果 shell 或调用环境不方便传递 `/switch-account` 这个参数，可以退回兼容形式：`codex-account-switcher slash "<去掉 /switch-account 后的文本>" --json`。
+- 用户以 `/switch-account` 开头时，把完整 slash 消息交给底层 CLI，并追加 `--json`；总结返回的 `message`。
+- 如果 shell 或调用环境不方便传递 `/switch-account` 这个参数，可以退回兼容形式：调用底层 CLI 的 `slash "<去掉 /switch-account 后的文本>" --json`。
+- 不要把底层 CLI 前缀展示给用户；用户可见命令一律写成 `/switch-account ...`。
 
 ## 能力映射
 
-- 列出账号：`codex-account-switcher /switch-account list --json`，总结标签、当前状态、5 小时余额、7 天余额和错误。
-- 保存当前：`codex-account-switcher /switch-account 保存当前 <名称> --json`。
-- 导入账号：`codex-account-switcher /switch-account import <path> <名称> --json`。
-- 刷新余额：`codex-account-switcher /switch-account refresh --json`。
-- 切换账号：`codex-account-switcher /switch-account switch <账号名或id> --json`，说明是否写入磁盘、验证、同步刷新后快照、是否安排 app-server 刷新，以及是否还需要 reload/restart。
-- 最佳账号：`codex-account-switcher /switch-account best --json`。
-- 默认配置查看：`codex-account-switcher /switch-account defaults show --json`。
-- 默认权限/审批：`codex-account-switcher /switch-account defaults set --sandbox read-only|workspace-write|danger-full-access --approval untrusted|on-request|never --json`。
-- 默认模型预设：`codex-account-switcher /switch-account defaults preset speed|balanced|smart|custom --json`。
-- 默认模型细项：`codex-account-switcher /switch-account defaults set --model <model> --effort minimal|low|medium|high|xhigh --speed standard|fast --json`。
-- 切换后自动刷新运行态：`codex-account-switcher /switch-account auto-refresh --json`。
-- 关闭自动刷新：`codex-account-switcher /switch-account 关闭自动刷新运行态 --json`。
-- 立即应用默认配置：`codex-account-switcher /switch-account defaults apply --json`。
+- 列出账号：`/switch-account list`，总结标签、当前状态、5 小时余额、7 天余额和错误。
+- 保存当前：`/switch-account 保存当前 <名称>`。
+- 导入账号：`/switch-account import <path> <名称>`。
+- 刷新余额：`/switch-account refresh`。
+- 切换账号：`/switch-account switch <账号名或id>`，说明是否写入磁盘、验证、同步刷新后快照、是否安排 app-server 刷新，以及是否还需要 reload/restart。
+- 最佳账号：`/switch-account best`。
+- 默认配置查看：`/switch-account defaults show`。
+- 默认权限/审批：`/switch-account defaults set --sandbox read-only|workspace-write|danger-full-access --approval untrusted|on-request|never`。
+- 默认模型预设：`/switch-account defaults preset speed|balanced|smart|custom`。
+- 默认模型细项：`/switch-account defaults set --model <model> --effort minimal|low|medium|high|xhigh --speed standard|fast`。
+- 切换后自动刷新运行态：`/switch-account auto-refresh`。
+- 关闭自动刷新：`/switch-account 关闭自动刷新运行态`。
+- 立即应用默认配置：`/switch-account defaults apply`。
 
 ## `/switch-account` 示例
 
