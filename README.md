@@ -1,18 +1,45 @@
-# Codex 账号切换器
+<p align="center">
+  <img src="media/readme-preview.png" alt="Codex 账号切换器界面预览" width="880">
+</p>
 
-一个中文本地工具，用来管理多个 Codex `auth.json` 账号快照，查看 5 小时和 7 天余额，并快速切换到指定账号或余额最多的账号。
+<h1 align="center">Codex 账号切换器</h1>
 
-它提供三个入口：
+<p align="center">
+  管理多个 Codex <code>auth.json</code> 快照，查看 5 小时 / 7 天余额，并快速切换到指定账号或余额最多的账号。
+</p>
 
-- **Codex App 插件**：推荐入口。安装后可以在 Codex 对话里直接用中文命令管理账号。
-- **VS Code 扩展**：适合本地 VS Code 和 Remote SSH，提供 Activity Bar 侧栏 UI。
-- **CLI**：适合自动化脚本、调试和 Codex App 插件调用。
+<p align="center">
+  <a href="https://github.com/Nahuyiur/codex-switcher"><img alt="GitHub" src="https://img.shields.io/badge/GitHub-Nahuyiur%2Fcodex--switcher-24292f?style=flat-square"></a>
+  <img alt="Language" src="https://img.shields.io/badge/UI-%E4%B8%AD%E6%96%87-2563eb?style=flat-square">
+  <img alt="TypeScript" src="https://img.shields.io/badge/Core-TypeScript-3178c6?style=flat-square">
+  <img alt="Entrypoints" src="https://img.shields.io/badge/%E5%85%A5%E5%8F%A3-Codex%20App%20%7C%20VS%20Code%20%7C%20CLI-16a34a?style=flat-square">
+</p>
+
+## 适合谁
+
+如果你有多个 Codex 账号，或者经常在本机 Codex App、VS Code Remote SSH、远程服务器之间切换账号，这个工具可以把“手动复制 `~/.codex/auth.json`”变成一个可验证、可回滚、可自动选择的流程。
+
+| 能力 | 做什么 |
+| --- | --- |
+| 账号库 | 保存当前 Codex 登录，或从指定路径导入已有 `auth.json`。 |
+| 余额视图 | 读取 Codex 5 小时和 7 天窗口，显示剩余百分比和重置时间。 |
+| 快速切换 | 写入目标机器的 `~/.codex/auth.json`，写入前备份，写入后验证。 |
+| 自动选择 | 按 `min(5小时余额, 7天余额)` 选择瓶颈余额最大的账号。 |
+| 默认配置 | 切换账号后自动恢复访问权限、审批策略、模型、智能档和速度档。 |
+
+## 三种入口
+
+| 入口 | 推荐场景 | 体验 |
+| --- | --- | --- |
+| **Codex App 插件** | 你主要在 Codex App 里使用 | 直接对 Codex 说中文命令，例如“切换到余额最多的账号”。 |
+| **VS Code 扩展** | 本机 VS Code 或 Remote SSH | Activity Bar 侧栏、状态栏、账号列表、余额条和默认配置面板。 |
+| **CLI** | 自动化、脚本、调试 | `codex-account-switcher switch --best` 这类命令式入口。 |
 
 工具只操作当前机器上的 Codex 配置。VS Code Remote SSH 中使用时，扩展运行在远程 extension host，因此修改的是远程服务器的 `~/.codex/auth.json` 和 `~/.codex/config.toml`，不会自动同步本机账号。
 
 ## 最快开始：Codex App 插件
 
-先在仓库根目录安装依赖、构建 CLI，并把 `codex-account-switcher` 链接到本机 PATH：
+在仓库根目录安装依赖、构建 CLI，并把 `codex-account-switcher` 链接到本机 PATH：
 
 ```bash
 npm install
@@ -20,23 +47,25 @@ npm run build
 npm link
 ```
 
-然后安装 Codex 插件：
+安装 Codex 插件：
 
 ```bash
 codex plugin marketplace add Nahuyiur/codex-switcher --ref main
 codex plugin add codex-account-switcher@codex-switcher
 ```
 
-安装完成后，在 Codex App 对话里可以直接说这些中文命令：
+安装完成后，可以直接在 Codex App 对话里说：
 
-- “把当前 Codex 登录保存成主账号”
-- “从 `./accounts/backup.auth.json` 导入一个账号，叫备用账号”
-- “列出 Codex 账号和余额”
-- “刷新所有账号余额”
-- “切换到余额最多的账号”
-- “把默认访问权限设成工作区可写”
-- “把默认模型设成智能优先并立即应用”
-- “切换账号后自动重启 app-server”
+| 你说 | 它会做 |
+| --- | --- |
+| “把当前 Codex 登录保存成主账号” | 读取当前 `~/.codex/auth.json` 并保存快照。 |
+| “从 `./accounts/backup.auth.json` 导入一个账号，叫备用账号” | 从相对路径导入一个账号快照。 |
+| “列出 Codex 账号和余额” | 显示账号、当前标记、5 小时/7 天余额。 |
+| “刷新所有账号余额” | 逐个账号调用余额读取。 |
+| “切换到余额最多的账号” | 自动选择瓶颈余额最大的账号并切换。 |
+| “把默认访问权限设成工作区可写” | 保存默认权限配置。 |
+| “把默认模型设成智能优先并立即应用” | 保存并写入 `~/.codex/config.toml`。 |
+| “切换账号后自动重启 app-server” | 后续切换时额外尝试重启 app-server daemon。 |
 
 Codex App 插件本身是 skill 插件，不是侧边栏 UI。它会调用本项目构建出的 CLI，所以第一次使用前需要完成上面的 `npm run build` 和 `npm link`。
 
@@ -44,7 +73,7 @@ Codex App 插件本身是 skill 插件，不是侧边栏 UI。它会调用本项
 
 本工具不自建 OAuth 登录流程。你需要先用官方 Codex 登录账号，再把当前登录或已有 `auth.json` 保存进账号库。
 
-方法一：保存当前 Codex 登录账号。
+### 保存当前登录
 
 ```bash
 codex-account-switcher add-current --label 主账号
@@ -52,13 +81,22 @@ codex-account-switcher add-current --label 主账号
 
 这会读取当前机器的 `~/.codex/auth.json`，保存为账号快照。
 
-方法二：从指定路径导入已有 `auth.json`。推荐使用相对路径，方便不同机器和不同用户复用同一套说明。
+### 从文件导入
+
+推荐使用相对路径，方便不同机器和不同用户复用同一套说明：
 
 ```bash
 codex-account-switcher import --from ./accounts/backup.auth.json --label 备用账号
 ```
 
-CLI 中的相对路径按当前 shell 所在目录解析。VS Code 扩展设置里的相对账号库路径按当前 workspace 解析；Remote SSH 时按远程 workspace 解析。
+相对路径规则：
+
+| 入口 | 相对路径从哪里算 |
+| --- | --- |
+| CLI | 当前 shell 所在目录。 |
+| VS Code 扩展设置 | 当前 workspace。 |
+| VS Code Remote SSH | 远程 workspace。 |
+| Codex App 插件 | 当前对话所在工作目录。 |
 
 账号快照默认保存在：
 
@@ -82,43 +120,34 @@ codex-account-switcher switch <account-id>
 codex-account-switcher switch --best
 ```
 
-切换时会执行这些操作：
+切换流程：
 
-- 把目标账号快照写入当前目标机器的 `~/.codex/auth.json`。
-- 写入前备份旧文件，备份名类似 `auth.json.bak.account-switcher-...`。
-- 写入后通过 Codex app-server 的 `account/read(refreshToken=true)` 尝试验证账号。
-- 如果 Codex 在验证时刷新了 token，工具会把刷新后的 `auth.json` 同步回账号快照，避免下次切回旧 token。
-- 如果开启了默认运行配置，切换后还会写入当前目标机器的 `~/.codex/config.toml`。
-- 如果开启了“切换后重启 app-server”，工具会额外执行 `codex app-server daemon restart`。这不是默认行为，适合你发现 Codex App/daemon 运行态没有及时跟上磁盘 auth 时使用。
+```text
+选择账号快照
+  -> 备份当前 ~/.codex/auth.json
+  -> 写入目标账号 auth.json
+  -> account/read(refreshToken=true) 验证
+  -> 如 token 被刷新，同步回账号快照
+  -> 如启用默认运行配置，写入 ~/.codex/config.toml
+  -> 如启用 app-server 重启，执行 codex app-server daemon restart
+```
+
+需要注意：
+
 - 已经运行中的 Codex 对话不保证热切换；必要时 reload/restart，新请求会使用新账号和新配置。
-
-余额读取依赖 Codex app-server 的 `account/rateLimits/read`。如果余额刷新失败，工具仍然可以切换账号，因为基础切换只依赖本地 `auth.json` 文件。
+- 余额读取依赖 Codex app-server 的 `account/rateLimits/read`。
+- 如果余额刷新失败，工具仍然可以切换账号，因为基础切换只依赖本地 `auth.json` 文件。
 
 ## 默认权限、模型和速度
 
 账号切换后，Codex 可能回到其它权限或模型设置。本工具可以保存一套默认运行配置，并在每次切换账号后自动写回 `~/.codex/config.toml`。
 
-查看当前默认配置：
+常用命令：
 
 ```bash
 codex-account-switcher defaults show
-```
-
-选择智能优先预设：
-
-```bash
 codex-account-switcher defaults preset smart
-```
-
-设置访问权限、审批策略和速度档：
-
-```bash
 codex-account-switcher defaults set --sandbox workspace-write --approval on-request --speed fast
-```
-
-立即应用已保存的默认配置：
-
-```bash
 codex-account-switcher defaults apply
 ```
 
@@ -134,29 +163,23 @@ codex-account-switcher defaults set --restart-app-server-after-switch true
 codex-account-switcher defaults set --no-restart-app-server-after-switch
 ```
 
-访问权限三档：
+### 配置含义
 
-- `read-only`：只读。
-- `workspace-write`：工作区可写。
-- `danger-full-access`：完全访问。
+| 配置 | 可选值 | 说明 |
+| --- | --- | --- |
+| 访问权限 | `read-only` / `workspace-write` / `danger-full-access` | 只读、工作区可写、完全访问。 |
+| 审批策略 | `untrusted` / `on-request` / `never` | 严格、按需、不请求审批。 |
+| 模型预设 | `speed` / `balanced` / `smart` / `custom` | 速度优先、均衡、智能优先、自定义。 |
+| 速度档 | `standard` / `fast` | `fast` 会写入 `service_tier = "priority"`；`standard` 会移除该默认速度档。 |
 
-审批策略：
+模型预设默认值：
 
-- `untrusted`：更严格，只自动执行可信命令。
-- `on-request`：按需请求审批。
-- `never`：不请求审批。
-
-模型预设：
-
-- `speed`：速度优先，写入 `gpt-5.4-mini`、`low`、标准速度。
-- `balanced`：均衡，写入 `gpt-5.5`、`medium`、标准速度。
-- `smart`：智能优先，写入 `gpt-5.5`、`xhigh`、快速速度档。
-- `custom`：使用你手动指定的 `--model`、`--effort` 和 `--speed`。
-
-速度档：
-
-- `standard`：标准速度，并移除默认配置里的 `service_tier`。
-- `fast`：快速速度档，写入 `service_tier = "priority"`。
+| 预设 | 模型 | reasoning effort | 速度档 |
+| --- | --- | --- | --- |
+| `speed` | `gpt-5.4-mini` | `low` | `standard` |
+| `balanced` | `gpt-5.5` | `medium` | `standard` |
+| `smart` | `gpt-5.5` | `xhigh` | `fast` |
+| `custom` | 手动指定 | 手动指定 | 手动指定 |
 
 ## VS Code 扩展
 
@@ -168,7 +191,7 @@ npm run package:vsix
 
 生成的 `.vsix` 可以安装到 VS Code。安装后，从 Activity Bar 打开“Codex 账号”侧栏。
 
-侧栏支持：
+侧栏里可以完成：
 
 - 保存当前账号。
 - 从 `auth.json` 导入账号。
@@ -209,16 +232,29 @@ node dist/src/cli.js list
 
 常用参数：
 
-- `--codex-home <path>`：指定目标 Codex home，默认是 `~/.codex`，支持相对路径。
-- `--store <path>`：指定账号库路径，默认是 `~/.codex/account-switcher`，支持相对路径。
-- `--codex-cli <path>`：指定 Codex CLI 路径，默认从 `CODEX_CLI_PATH` 或 PATH 查找 `codex`；`./tools/codex` 这类路径支持相对写法，裸命令 `codex` 仍然走 PATH。
-- `--json`：输出 JSON，适合脚本处理。
+| 参数 | 说明 |
+| --- | --- |
+| `--codex-home <path>` | 指定目标 Codex home，默认是 `~/.codex`，支持相对路径。 |
+| `--store <path>` | 指定账号库路径，默认是 `~/.codex/account-switcher`，支持相对路径。 |
+| `--codex-cli <path>` | 指定 Codex CLI 路径。裸命令 `codex` 走 PATH；`./tools/codex` 这类路径支持相对写法。 |
+| `--json` | 输出 JSON，适合脚本处理。 |
 
 示例：对临时 Codex home 操作，不影响真实账号。
 
 ```bash
 codex-account-switcher --codex-home ./tmp/codex-home --store ./tmp/codex-store defaults show --json
 ```
+
+## 文件写入边界
+
+| 文件或目录 | 什么时候会写 |
+| --- | --- |
+| `~/.codex/auth.json` | 切换账号时写入目标账号快照。 |
+| `~/.codex/auth.json.bak.account-switcher-*` | 切换前备份旧 auth。 |
+| `~/.codex/account-switcher/` | 保存账号快照、余额缓存、默认配置。 |
+| `~/.codex/config.toml` | 启用默认运行配置后写入权限、模型、速度档。 |
+
+本机和远程不会默认同步。Remote SSH 场景下，远程服务器需要单独保存或导入账号。
 
 ## 常见问题
 
@@ -229,10 +265,6 @@ codex-account-switcher --codex-home ./tmp/codex-home --store ./tmp/codex-store d
 **切换后当前 Codex 对话为什么没有立刻变化？**
 
 运行中的 Codex session 不保证热切换。切换主要保证磁盘 `auth.json`、后续请求或新 session 生效；必要时 reload/restart。你也可以开启 `--restart-app-server-after-switch true`，让工具在切换后尝试重启 app-server daemon。
-
-**本机和远程服务器账号会同步吗？**
-
-不会默认同步。VS Code Remote SSH 场景下，远程服务器需要单独保存或导入账号。
 
 **会不会显示 token？**
 
