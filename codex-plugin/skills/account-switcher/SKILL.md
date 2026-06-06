@@ -33,12 +33,12 @@
 
 - `/switch-account list`：列出账号和余额。
 - `/switch-account refresh`：刷新所有账号余额。
-- `/switch-account best`：切换到余额最多的账号。
+- `/switch-account best`：切换到瓶颈余额最高的账号。
 - `/switch-account switch muka2`：切换到标签/id/email 匹配 `muka2` 的账号。
 - `/switch-account muka2`：简写，直接切换到 `muka2`。
 - `/switch-account status`：查看当前账号是否已保存在账号库。
 - `/switch-account 保存当前 主账号`：把当前 Codex 登录保存为 `主账号`。
-- `/switch-account import ./accounts/backup.auth.json 备用账号`：导入 auth 文件。
+- `/switch-account import ../codex-auths/backup.auth.json 备用账号`：导入 auth 文件。
 - `/switch-account auto-refresh`：开启切换后的自动运行态刷新。
 - `/switch-account 关闭自动刷新运行态`：关闭切换后的自动运行态刷新。
 - `/switch-account defaults show`：查看默认权限、审批、模型、智能档和速度。

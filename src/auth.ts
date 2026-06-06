@@ -28,7 +28,7 @@ export async function readAuthJson(filePath: string): Promise<AuthJson> {
 export function stableAuthHash(auth: AuthJson): string {
   const accountId = getAccountId(auth);
   const email = getEmail(auth);
-  const stable = accountId || email || auth.OPENAI_API_KEY || auth.tokens?.access_token || auth.tokens?.refresh_token || JSON.stringify(auth);
+  const stable = accountId || email || auth.tokens?.refresh_token || auth.OPENAI_API_KEY || auth.tokens?.access_token || JSON.stringify(auth);
   return crypto.createHash("sha256").update(stable).digest("hex").slice(0, 16);
 }
 
@@ -86,9 +86,12 @@ export function redactAuth(value: unknown): unknown {
 
 export function sanitizeError(error: unknown): string {
   return String((error as Error)?.message || error)
+    .replace(/(Bearer\s+)[a-zA-Z0-9._~+/=-]+/gi, "$1<redacted>")
+    .replace(/(["']?(?:access_token|refresh_token|id_token|OPENAI_API_KEY|api_key|authorization)["']?\s*[:=]\s*["']?)([^"',\s)]+)/gi, "$1<redacted>")
     .replace(/eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/g, "<jwt>")
     .replace(/rt\.[a-zA-Z0-9._-]+/g, "<refresh-token>")
-    .replace(/sk-[a-zA-Z0-9_-]+/g, "<api-key>");
+    .replace(/sk-[a-zA-Z0-9_-]+/g, "<api-key>")
+    .replace(/sess-[a-zA-Z0-9._-]+/g, "<session-token>");
 }
 
 function readOpenAiAuthClaim(token: string | undefined): Record<string, string> | undefined {

@@ -58,12 +58,12 @@ async function main(): Promise<void> {
       return;
     }
     case "refresh-limits": {
-      const accounts = await switcher.refreshLimits(args.flags.all ? undefined : args.values[0]);
+      const accounts = await switcher.refreshLimits(booleanFlag(args, "all") ? undefined : args.values[0]);
       output(args, accounts, renderList(accounts));
       return;
     }
     case "switch": {
-      const result = args.flags.best ? await switcher.switchBest() : await switcher.switchAccount(args.values[0]);
+      const result = booleanFlag(args, "best") ? await switcher.switchBest() : await switcher.switchAccount(args.values[0]);
       output(args, result, result.message);
       return;
     }
@@ -100,7 +100,11 @@ async function handleDefaults(args: ParsedArgs, switcher: AccountSwitcher): Prom
       return;
     }
     case "set": {
-      const settings = await switcher.updateSettings(readSettingsUpdate(args));
+      const update = readSettingsUpdate(args);
+      if (Object.keys(update).length === 0) {
+        throw new Error("请提供要设置的默认运行配置。");
+      }
+      const settings = await switcher.updateSettings(update);
       output(args, settings, `已保存默认运行配置：${describeSettings(settings)}`);
       return;
     }
@@ -271,9 +275,29 @@ function readRawSlashCommand(argv: string[]): { text: string; json: boolean } | 
   }
   const json = argv.includes("--json");
   return {
-    text: argv.slice(commandIndex).filter((part) => part !== "--json").join(" "),
+    text: stripSlashGlobalArgs(argv.slice(commandIndex)).join(" "),
     json,
   };
+}
+
+function stripSlashGlobalArgs(argv: string[]): string[] {
+  const output: string[] = [];
+  const globalFlagsWithValue = new Set(["--codex-home", "--store", "--codex-cli"]);
+  for (let index = 0; index < argv.length; index++) {
+    const part = argv[index];
+    if (part === "--json") {
+      continue;
+    }
+    const [key] = part.split("=", 1);
+    if (globalFlagsWithValue.has(key)) {
+      if (!part.includes("=")) {
+        index++;
+      }
+      continue;
+    }
+    output.push(part);
+  }
+  return output;
 }
 
 function stringFlag(args: ParsedArgs, key: string): string | undefined {
@@ -303,7 +327,7 @@ function printHelp(): void {
 
 用法:
   codex-account-switcher /switch-account 保存当前 主账号 [--json]
-  codex-account-switcher /switch-account import ./accounts/backup.auth.json 备用账号 [--json]
+  codex-account-switcher /switch-account import ../codex-auths/backup.auth.json 备用账号 [--json]
   codex-account-switcher /switch-account list [--json]
   codex-account-switcher /switch-account refresh [--json]
   codex-account-switcher /switch-account switch muka2 [--json]

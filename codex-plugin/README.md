@@ -32,7 +32,7 @@ codex plugin add codex-account-switcher@codex-switcher
 - “/switch-account muka2”
 - “/switch-account status”
 - “/switch-account 保存当前 主账号”
-- “/switch-account import ./accounts/backup.auth.json 备用账号”
+- “/switch-account import ../codex-auths/backup.auth.json 备用账号”
 - “/switch-account auto-refresh”
 - “/switch-account 关闭自动刷新运行态”
 - “/switch-account defaults show”
@@ -42,14 +42,15 @@ codex plugin add codex-account-switcher@codex-switcher
 - “/switch-account defaults apply”
 - “/switch-account help”
 
-也可以直接说中文：
+也支持部分中文短句。为保证稳定，建议保留 `/switch-account` 前缀：
 
-- “保存当前 Codex 登录为主账号”
-- “从 `./accounts/backup.auth.json` 导入一个账号”
-- “列出 Codex 账号和余额”
-- “刷新所有账号余额”
-- “切换到 `muka2`”
-- “切换到余额最多的账号”
-- “把默认权限设成工作区可写”
-- “把默认模型设成智能优先并立即应用”
-- “切换账号后自动刷新运行态”
+- “/switch-account 把当前 Codex 登录保存成主账号”
+- “/switch-account 从 `../codex-auths/backup.auth.json` 导入一个账号 叫备用账号”
+- “/switch-account 列出 Codex 账号和余额”
+- “/switch-account 刷新所有账号余额”
+- “/switch-account 切换到 `muka2`”
+- “/switch-account 切换到瓶颈余额最高的账号”
+- “/switch-account 默认权限 工作区可写”
+- “/switch-account 默认模型 smart”
+- “/switch-account 应用默认配置”
+- “/switch-account auto-refresh”

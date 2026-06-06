@@ -127,17 +127,20 @@ export class AccountSwitcher {
       const previousKey = await this.readActiveKey();
       if (await exists(targetPath)) {
         await fs.copyFile(targetPath, backupPath);
+        await chmodPrivate(backupPath);
       } else {
-        await fs.writeFile(backupPath, "{}\n", "utf8");
+        await fs.writeFile(backupPath, "{}\n", { encoding: "utf8", mode: 0o600 });
       }
       const snapshot = await this.store.readSnapshot(account);
       parseAuthJson(snapshot);
       const tmp = `${targetPath}.tmp-${process.pid}-${Date.now()}`;
       try {
-        await fs.writeFile(tmp, snapshot.endsWith("\n") ? snapshot : `${snapshot}\n`, "utf8");
+        await fs.writeFile(tmp, snapshot.endsWith("\n") ? snapshot : `${snapshot}\n`, { encoding: "utf8", mode: 0o600 });
         await fs.rename(tmp, targetPath);
+        await chmodPrivate(targetPath);
       } catch (error) {
         await safeCopy(backupPath, targetPath);
+        await chmodPrivate(targetPath);
         throw new Error(`写入 auth.json 失败，已尝试恢复备份: ${sanitizeError(error)}`);
       }
       const verification = await this.verifyAndRefreshActiveAccount(account, snapshot);
@@ -307,9 +310,14 @@ async function withLock<T>(lockDir: string, action: () => Promise<T>): Promise<T
 async function safeCopy(from: string, to: string): Promise<void> {
   try {
     await fs.copyFile(from, to);
+    await chmodPrivate(to);
   } catch {
     // Best-effort restore only.
   }
+}
+
+async function chmodPrivate(filePath: string): Promise<void> {
+  await fs.chmod(filePath, 0o600).catch(() => undefined);
 }
 
 async function exists(filePath: string): Promise<boolean> {

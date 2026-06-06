@@ -39,7 +39,7 @@ export async function runSwitchAccountSlashCommand(
     };
   }
 
-  if (matchesAny(body, ["list", "ls", "账号", "列表", "列出", "余额", "查看余额"])) {
+  if (matchesAny(body, ["list", "ls", "账号", "列表", "列出", "余额", "查看余额", "列出 Codex 账号和余额"])) {
     const accounts = await switcher.list();
     return { action: "list", message: renderSlashList(accounts), result: accounts };
   }
@@ -58,7 +58,7 @@ export async function runSwitchAccountSlashCommand(
     return { action: "refresh-limits", message: renderSlashList(accounts), result: accounts };
   }
 
-  if (matchesAny(body, ["best", "auto", "自动", "自动切换", "余额最多", "切换到余额最多"])) {
+  if (matchesAny(body, ["best", "auto", "自动", "自动切换", "余额最多", "切换到余额最多", "切换到余额最多的账号", "切换到瓶颈余额最高", "切换到瓶颈余额最高的账号"])) {
     const result = await switcher.switchBest();
     return { action: "switch-best", message: result.message, result };
   }
@@ -123,6 +123,12 @@ function parseSwitchTarget(input: string): string | undefined {
 
 function parseSaveCurrent(input: string): string | undefined {
   const normalized = normalize(input);
+  const natural =
+    /^把?当前\s*Codex\s*登录保存(?:成|为)?\s*(.+)$/i.exec(normalized)
+    || /^保存当前\s*Codex\s*登录(?:成|为)?\s*(.+)$/i.exec(normalized);
+  if (natural) {
+    return cleanLabel(natural[1] || "");
+  }
   const match = /^(add-current|save-current|save|保存当前|保存当前账号)(?:\s+(.+))?$/i.exec(normalized);
   if (!match) {
     return undefined;
@@ -147,7 +153,9 @@ function parseImport(input: string): { path: string; label?: string } | undefine
     throw new Error("导入账号需要提供 auth.json 路径。");
   }
   const labelIndex = parts.findIndex((part) => part === "--label" || part === "label" || part === "叫" || part === "命名为");
-  const label = labelIndex >= 0 ? parts.slice(labelIndex + 1).join(" ") : parts.slice(fromIndex >= 0 ? fromIndex + 2 : 2).join(" ");
+  const label = labelIndex >= 0
+    ? collectUntilFlag(parts, labelIndex + 1).join(" ")
+    : collectUntilFlag(parts, fromIndex >= 0 ? fromIndex + 2 : 2).join(" ");
   return { path, label: cleanLabel(label) || undefined };
 }
 
@@ -417,13 +425,19 @@ async function findAccountByText(switcher: AccountSwitcher, text: string): Promi
   const normalized = normalize(text).toLowerCase();
   const account = accounts.find((entry) => entry.id === text)
     || accounts.find((entry) => normalize(entry.label).toLowerCase() === normalized)
-    || accounts.find((entry) => entry.email?.toLowerCase() === normalized)
-    || accounts.find((entry) => normalize(entry.label).toLowerCase().includes(normalized));
-  if (!account) {
-    const labels = accounts.map((entry) => entry.label).join("、") || "暂无账号";
-    throw new Error(`没有找到账号：${text}。当前账号：${labels}`);
+    || accounts.find((entry) => entry.email?.toLowerCase() === normalized);
+  if (account) {
+    return account;
   }
-  return account;
+  const partialMatches = accounts.filter((entry) => normalize(entry.label).toLowerCase().includes(normalized));
+  if (partialMatches.length === 1) {
+    return partialMatches[0];
+  }
+  if (partialMatches.length > 1) {
+    throw new Error(`账号名不够精确：${text}。匹配到：${partialMatches.map((entry) => entry.label).join("、")}`);
+  }
+  const labels = accounts.map((entry) => entry.label).join("、") || "暂无账号";
+  throw new Error(`没有找到账号：${text}。当前账号：${labels}`);
 }
 
 function renderSlashList(accounts: AccountSummary[]): string {
@@ -476,7 +490,7 @@ function slashExamples(): string[] {
     "/switch-account switch muka2",
     "/switch-account best",
     "/switch-account status",
-    "/switch-account import ./accounts/backup.auth.json 备用账号",
+    "/switch-account import ../codex-auths/backup.auth.json 备用账号",
     "/switch-account auto-refresh",
     "/switch-account 关闭自动刷新运行态",
     "/switch-account defaults preset smart",
@@ -526,6 +540,17 @@ function splitArgs(input: string): string[] {
   }
   if (current) {
     result.push(current);
+  }
+  return result;
+}
+
+function collectUntilFlag(parts: string[], start: number): string[] {
+  const result: string[] = [];
+  for (let index = start; index < parts.length; index++) {
+    if (parts[index].startsWith("--")) {
+      break;
+    }
+    result.push(parts[index]);
   }
   return result;
 }
@@ -705,9 +730,9 @@ function findModelPresetAlias(input: string): ModelPreset | undefined {
 }
 
 function findReasoningAlias(input: string): ReasoningEffort | undefined {
-  return ["minimal", "low", "medium", "high", "xhigh", "最低", "低", "中等", "中", "高", "最高", "极高", "超高"]
+  return ["minimal", "xhigh", "medium", "high", "low", "最高", "极高", "超高", "最低", "中等", "高", "低", "中"]
     .map(normalizeReasoningAlias)
-    .find((value, index) => value && input.includes(["minimal", "low", "medium", "high", "xhigh", "最低", "低", "中等", "中", "高", "最高", "极高", "超高"][index]));
+    .find((value, index) => value && input.includes(["minimal", "xhigh", "medium", "high", "low", "最高", "极高", "超高", "最低", "中等", "高", "低", "中"][index]));
 }
 
 function findSpeedAlias(input: string): SpeedTier | undefined {

@@ -5,7 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { AccountSwitcher } from "../src/manager";
 import { normalizeRateWindows, pickBestAccount, scoreAccount } from "../src/rateLimits";
-import { parseAuthJson, sanitizeError, summarizeAuth } from "../src/auth";
+import { parseAuthJson, sanitizeError, stableAuthHash, summarizeAuth } from "../src/auth";
 import { StoredAccount } from "../src/types";
 import { updateTopLevelToml } from "../src/codexConfig";
 import { findCodexAppServerPids } from "../src/appServerRestart";
@@ -33,6 +33,14 @@ test("JWT metadata is extracted without exposing tokens", () => {
     planType: "pro",
     suggestedLabel: "demo@example.com",
   });
+});
+
+test("stable auth hash prefers refresh token over rotating access token", () => {
+  const first = parseAuthJson(JSON.stringify({ tokens: { access_token: "access-old", refresh_token: "refresh-stable" } }));
+  const second = parseAuthJson(JSON.stringify({ tokens: { access_token: "access-new", refresh_token: "refresh-stable" } }));
+  assert.equal(summarizeAuth(first).accountId, undefined);
+  assert.equal(summarizeAuth(second).accountId, undefined);
+  assert.equal(stableAuthHash(first), stableAuthHash(second));
 });
 
 test("rate limit windows are classified and clamped", () => {
@@ -160,6 +168,37 @@ test("switch refreshes active auth and syncs refreshed snapshot", async () => {
   assert.match(await fs.readFile(path.join(store, account.snapshotFile), "utf8"), /new-token/);
 });
 
+test("switch keeps token-only account active after access token refresh", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-switcher-token-only-refresh-test-"));
+  const codexHome = path.join(root, "codex");
+  const store = path.join(root, "store");
+  const cli = path.join(root, "mock-codex.js");
+  await fs.mkdir(codexHome, { recursive: true });
+  await fs.writeFile(cli, mockCodexCli({ tokenOnly: true }), "utf8");
+  await fs.chmod(cli, 0o755);
+
+  const authPath = path.join(root, "token-only.auth.json");
+  await fs.writeFile(
+    authPath,
+    JSON.stringify({ tokens: { access_token: "old-token", refresh_token: "stable-refresh" } }),
+    "utf8",
+  );
+
+  const switcher = new AccountSwitcher({
+    baseDir: root,
+    codexHome,
+    accountLibraryPath: store,
+    codexCliPath: "./mock-codex.js",
+    appServerTimeoutMs: 1_000,
+  });
+  const account = await switcher.importAuth("./token-only.auth.json", "token-only");
+  const result = await switcher.switchAccount(account.id);
+
+  assert.equal(result.verified, true);
+  assert.equal((await switcher.status())?.label, "token-only");
+  assert.match(await fs.readFile(path.join(codexHome, "auth.json"), "utf8"), /new-token/);
+});
+
 test("relative codex and store paths resolve from configured baseDir", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-switcher-relative-test-"));
   const authPath = path.join(root, "account.auth.json");
@@ -179,6 +218,32 @@ test("relative codex and store paths resolve from configured baseDir", async () 
   assert.equal(switcher.codexHome, path.join(root, "codex"));
   assert.equal(switcher.store.root, path.join(root, "store"));
   assert.equal(account.sourcePath, authPath);
+});
+
+test("store rejects snapshot paths outside snapshots directory", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-switcher-store-boundary-test-"));
+  const store = path.join(root, "store");
+  await fs.mkdir(store, { recursive: true });
+  await fs.writeFile(
+    path.join(store, "accounts.json"),
+    JSON.stringify({
+      version: 1,
+      accounts: [
+        {
+          id: "bad",
+          label: "bad",
+          snapshotFile: "../auth.json",
+          addedAt: "now",
+          updatedAt: "now",
+          windows: [],
+        },
+      ],
+    }),
+    "utf8",
+  );
+
+  const switcher = new AccountSwitcher({ codexHome: path.join(root, "codex"), accountLibraryPath: store });
+  await assert.rejects(() => switcher.list(), /snapshotFile/);
 });
 
 test("slash command switches by account label", async () => {
@@ -231,6 +296,54 @@ test("slash command manages default runtime settings", async () => {
 
   await runSwitchAccountSlashCommand("/switch-account 默认权限 工作区可写", switcher);
   assert.equal((await switcher.getSettings()).sandboxMode, "workspace-write");
+
+  await runSwitchAccountSlashCommand("/switch-account 默认智能档 xhigh", switcher);
+  assert.equal((await switcher.getSettings()).modelReasoningEffort, "xhigh");
+  await runSwitchAccountSlashCommand("/switch-account 默认智能档 最高", switcher);
+  assert.equal((await switcher.getSettings()).modelReasoningEffort, "xhigh");
+});
+
+test("slash command import flags and account matching are strict", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-switcher-slash-import-test-"));
+  const codexHome = path.join(root, "codex");
+  const store = path.join(root, "store");
+  await fs.mkdir(codexHome, { recursive: true });
+  const one = path.join(root, "one.auth.json");
+  const two = path.join(root, "two.auth.json");
+  await fs.writeFile(one, JSON.stringify({ tokens: { access_token: "a", refresh_token: "ra", account_id: "one" } }), "utf8");
+  await fs.writeFile(two, JSON.stringify({ tokens: { access_token: "b", refresh_token: "rb", account_id: "two" } }), "utf8");
+
+  const switcher = new AccountSwitcher({ codexHome, accountLibraryPath: store, codexCliPath: "/missing/codex", appServerTimeoutMs: 25 });
+  const imported = await runSwitchAccountSlashCommand(`/switch-account import --label 备用 --from ${one}`, switcher);
+  assert.equal(imported.action, "import");
+  assert.equal((await switcher.list())[0].label, "备用");
+
+  await switcher.importAuth(one, "team-alpha");
+  await switcher.importAuth(two, "team-beta");
+  await assert.rejects(
+    () => runSwitchAccountSlashCommand("/switch-account switch team", switcher),
+    /账号名不够精确/,
+  );
+});
+
+test("slash command accepts documented Chinese phrases", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-switcher-slash-phrases-test-"));
+  const codexHome = path.join(root, "codex");
+  const store = path.join(root, "store");
+  const cli = path.join(root, "mock-codex.js");
+  await fs.mkdir(codexHome, { recursive: true });
+  await fs.writeFile(cli, mockCodexCli(), "utf8");
+  await fs.chmod(cli, 0o755);
+  await fs.writeFile(
+    path.join(codexHome, "auth.json"),
+    JSON.stringify({ tokens: { id_token: jwt("target@example.com", "acct-target"), access_token: "a", refresh_token: "ra", account_id: "active" } }),
+    "utf8",
+  );
+
+  const switcher = new AccountSwitcher({ baseDir: root, codexHome, accountLibraryPath: store, codexCliPath: "./mock-codex.js", appServerTimeoutMs: 1_000 });
+  assert.equal((await runSwitchAccountSlashCommand("/switch-account 把当前 Codex 登录保存成主账号", switcher)).action, "add-current");
+  assert.equal((await runSwitchAccountSlashCommand("/switch-account 列出 Codex 账号和余额", switcher)).action, "list");
+  assert.equal((await runSwitchAccountSlashCommand("/switch-account 切换到余额最多的账号", switcher)).action, "switch-best");
 });
 
 test("codex app server pid detection skips vscode and temporary stdio servers", () => {
@@ -244,10 +357,14 @@ test("codex app server pid detection skips vscode and temporary stdio servers", 
 });
 
 test("sanitizeError redacts common token shapes", () => {
-  const text = sanitizeError(new Error("bad eyJaaa.bbb.ccc and rt.abc_123 and sk-test"));
+  const text = sanitizeError(new Error('bad eyJaaa.bbb.ccc and rt.abc_123 and sk-test and "access_token":"opaque-secret" and refresh_token=plain-secret and Authorization: Bearer bearer-secret and sess-abc_123'));
   assert.equal(text.includes("eyJaaa.bbb.ccc"), false);
   assert.equal(text.includes("rt.abc_123"), false);
   assert.equal(text.includes("sk-test"), false);
+  assert.equal(text.includes("opaque-secret"), false);
+  assert.equal(text.includes("plain-secret"), false);
+  assert.equal(text.includes("bearer-secret"), false);
+  assert.equal(text.includes("sess-abc_123"), false);
 });
 
 function account(id: string, five: number, seven: number): StoredAccount {
@@ -277,7 +394,7 @@ function jwt(email: string, accountId: string): string {
   return `x.${payload}.y`;
 }
 
-function mockCodexCli(): string {
+function mockCodexCli(options: { tokenOnly?: boolean } = {}): string {
   return `#!/usr/bin/env node
 const fs = require("node:fs");
 const path = require("node:path");
@@ -303,8 +420,24 @@ process.stdin.on("data", (chunk) => {
       process.stdout.write(JSON.stringify({
         id: message.id,
         result: {
-          account: { type: "chatgpt", email: "target@example.com", planType: "pro" },
+          account: ${options.tokenOnly ? '{ type: "chatgpt" }' : '{ type: "chatgpt", email: "target@example.com", planType: "pro" }'},
           requiresOpenaiAuth: false
+        }
+      }) + "\\n");
+    } else if (message.method === "account/rateLimits/read") {
+      process.stdout.write(JSON.stringify({
+        id: message.id,
+        result: {
+          rateLimits: {
+            limitId: "codex",
+            limitName: "Codex",
+            planType: "pro",
+            credits: null,
+            rateLimitReachedType: null,
+            primary: { usedPercent: 10, windowDurationMins: 300, resetsAt: 1 },
+            secondary: { usedPercent: 20, windowDurationMins: 10080, resetsAt: 2 }
+          },
+          rateLimitsByLimitId: null
         }
       }) + "\\n");
     }

@@ -2,3 +2,9 @@ dist/
 node_modules/
 *.vsix
 .DS_Store
+auth.json
+*.auth.json
+accounts/
+.codex/
+tmp/
+*.bak.account-switcher-*
