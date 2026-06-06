@@ -21,7 +21,7 @@ codex plugin add codex-account-switcher@codex-switcher
 
 ## `/switch-account` 入口
 
-`/switch-account ...` 是斜杠风格消息入口：你把它当普通消息发给 Codex，插件 skill 会把后面的文本交给 CLI 的 `slash` 解析器。它不是已确认的 Codex App 原生 autocomplete 命令，也不保证会出现在自动补全列表里。
+`/switch-account ...` 是斜杠风格消息入口：你把它当普通消息发给 Codex，插件 skill 会把后面的文本交给本项目的本地解析器。它不是已确认的 Codex App 原生 autocomplete 命令，也不保证会出现在自动补全列表里。
 
 常用写法：
 
@@ -35,6 +35,11 @@ codex plugin add codex-account-switcher@codex-switcher
 - “/switch-account import ./accounts/backup.auth.json 备用账号”
 - “/switch-account auto-refresh”
 - “/switch-account 关闭自动刷新运行态”
+- “/switch-account defaults show”
+- “/switch-account defaults preset smart”
+- “/switch-account defaults set --sandbox workspace-write --approval on-request --speed fast”
+- “/switch-account defaults set --model gpt-5.5 --effort xhigh --speed fast”
+- “/switch-account defaults apply”
 - “/switch-account help”
 
 也可以直接说中文：

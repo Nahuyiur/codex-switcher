@@ -265,12 +265,13 @@ function parseArgs(argv: string[]): ParsedArgs {
 }
 
 function readRawSlashCommand(argv: string[]): { text: string; json: boolean } | undefined {
-  if (argv[0] !== "/switch-account") {
+  const commandIndex = argv.findIndex((part) => part === "/switch-account");
+  if (commandIndex < 0) {
     return undefined;
   }
   const json = argv.includes("--json");
   return {
-    text: argv.filter((part) => part !== "--json").join(" "),
+    text: argv.slice(commandIndex).filter((part) => part !== "--json").join(" "),
     json,
   };
 }
@@ -301,15 +302,27 @@ function printHelp(): void {
   process.stdout.write(`Codex 账号切换器
 
 用法:
+  codex-account-switcher /switch-account 保存当前 主账号 [--json]
+  codex-account-switcher /switch-account import ./accounts/backup.auth.json 备用账号 [--json]
+  codex-account-switcher /switch-account list [--json]
+  codex-account-switcher /switch-account refresh [--json]
+  codex-account-switcher /switch-account switch muka2 [--json]
+  codex-account-switcher /switch-account best [--json]
+  codex-account-switcher /switch-account status [--json]
+  codex-account-switcher /switch-account auto-refresh [--json]
+  codex-account-switcher /switch-account defaults show [--json]
+  codex-account-switcher /switch-account defaults preset smart [--json]
+  codex-account-switcher /switch-account defaults set --sandbox workspace-write --approval on-request --speed fast [--json]
+  codex-account-switcher /switch-account defaults set --model gpt-5.5 --effort xhigh --speed fast [--json]
+  codex-account-switcher /switch-account defaults apply [--json]
+
+传统子命令:
   codex-account-switcher add-current [--label 名称]
   codex-account-switcher import --from /path/to/auth.json [--label 名称]
   codex-account-switcher list [--json]
   codex-account-switcher refresh-limits --all [--json]
   codex-account-switcher switch <account-id> [--json]
   codex-account-switcher switch --best [--json]
-  codex-account-switcher /switch-account list [--json]
-  codex-account-switcher /switch-account switch muka2 [--json]
-  codex-account-switcher /switch-account best [--json]
   codex-account-switcher slash "switch muka2" [--json]
   codex-account-switcher status [--json]
   codex-account-switcher defaults show [--json]

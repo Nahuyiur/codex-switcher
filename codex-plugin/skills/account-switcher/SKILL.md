@@ -15,19 +15,19 @@
 
 ## 能力映射
 
-- 列出账号：`codex-account-switcher list --json`，总结标签、当前状态、5 小时余额、7 天余额和错误。
-- 保存当前：`codex-account-switcher add-current --label <名称>`。
-- 导入账号：`codex-account-switcher import --from <path> --label <名称>`。
-- 刷新余额：`codex-account-switcher refresh-limits --all --json`。
-- 切换账号：`codex-account-switcher switch <account-id> --json`，说明是否写入磁盘、验证、同步刷新后快照、是否安排 app-server 刷新，以及是否还需要 reload/restart。
-- 最佳账号：`codex-account-switcher switch --best --json`。
-- 默认配置查看：`codex-account-switcher defaults show --json`。
-- 默认权限/审批：`codex-account-switcher defaults set --sandbox read-only|workspace-write|danger-full-access --json`；审批用 `--approval untrusted|on-request|never`。
-- 默认模型预设：`codex-account-switcher defaults preset speed|balanced|smart|custom --json`。
-- 默认模型细项：`codex-account-switcher defaults set --model <model> --effort minimal|low|medium|high|xhigh --speed standard|fast --json`。
-- 切换后自动刷新运行态：`codex-account-switcher defaults set --restart-app-server-after-switch true --app-server-restart-mode auto|daemon|codex-app --json`。
-- 关闭自动刷新：`codex-account-switcher defaults set --no-restart-app-server-after-switch --json`。
-- 立即应用默认配置：`codex-account-switcher defaults apply --json`。
+- 列出账号：`codex-account-switcher /switch-account list --json`，总结标签、当前状态、5 小时余额、7 天余额和错误。
+- 保存当前：`codex-account-switcher /switch-account 保存当前 <名称> --json`。
+- 导入账号：`codex-account-switcher /switch-account import <path> <名称> --json`。
+- 刷新余额：`codex-account-switcher /switch-account refresh --json`。
+- 切换账号：`codex-account-switcher /switch-account switch <账号名或id> --json`，说明是否写入磁盘、验证、同步刷新后快照、是否安排 app-server 刷新，以及是否还需要 reload/restart。
+- 最佳账号：`codex-account-switcher /switch-account best --json`。
+- 默认配置查看：`codex-account-switcher /switch-account defaults show --json`。
+- 默认权限/审批：`codex-account-switcher /switch-account defaults set --sandbox read-only|workspace-write|danger-full-access --approval untrusted|on-request|never --json`。
+- 默认模型预设：`codex-account-switcher /switch-account defaults preset speed|balanced|smart|custom --json`。
+- 默认模型细项：`codex-account-switcher /switch-account defaults set --model <model> --effort minimal|low|medium|high|xhigh --speed standard|fast --json`。
+- 切换后自动刷新运行态：`codex-account-switcher /switch-account auto-refresh --json`。
+- 关闭自动刷新：`codex-account-switcher /switch-account 关闭自动刷新运行态 --json`。
+- 立即应用默认配置：`codex-account-switcher /switch-account defaults apply --json`。
 
 ## `/switch-account` 示例
 
@@ -41,7 +41,12 @@
 - `/switch-account import ./accounts/backup.auth.json 备用账号`：导入 auth 文件。
 - `/switch-account auto-refresh`：开启切换后的自动运行态刷新。
 - `/switch-account 关闭自动刷新运行态`：关闭切换后的自动运行态刷新。
-- `/switch-account help`：显示 slash-style 帮助。
+- `/switch-account defaults show`：查看默认权限、审批、模型、智能档和速度。
+- `/switch-account defaults preset smart`：保存智能优先模型预设。
+- `/switch-account defaults set --sandbox workspace-write --approval on-request --speed fast`：手动设置默认权限、审批和速度。
+- `/switch-account defaults set --model gpt-5.5 --effort xhigh --speed fast`：手动设置模型、智能档和速度。
+- `/switch-account defaults apply`：立即写入 `~/.codex/config.toml`。
+- `/switch-account help`：显示斜杠入口帮助。
 
 ## 注意
 

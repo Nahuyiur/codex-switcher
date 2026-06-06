@@ -203,6 +203,36 @@ test("slash command switches by account label", async () => {
   assert.equal(stripCommandName("/switch-account list"), "list");
 });
 
+test("slash command manages default runtime settings", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-switcher-slash-defaults-test-"));
+  const codexHome = path.join(root, "codex");
+  const store = path.join(root, "store");
+  const switcher = new AccountSwitcher({ codexHome, accountLibraryPath: store, codexCliPath: "/missing/codex", appServerTimeoutMs: 25 });
+
+  const preset = await runSwitchAccountSlashCommand("/switch-account defaults preset smart", switcher);
+  assert.equal(preset.action, "defaults-preset");
+  assert.equal((await switcher.getSettings()).model, "gpt-5.5");
+  assert.equal((await switcher.getSettings()).modelReasoningEffort, "xhigh");
+  assert.equal((await switcher.getSettings()).speedTier, "fast");
+
+  const configured = await runSwitchAccountSlashCommand(
+    "/switch-account defaults set --sandbox read-only --approval never --speed standard apply",
+    switcher,
+  );
+  assert.equal(configured.action, "defaults-set");
+  const settings = await switcher.getSettings();
+  assert.equal(settings.sandboxMode, "read-only");
+  assert.equal(settings.approvalPolicy, "never");
+  assert.equal(settings.speedTier, "standard");
+  const config = await fs.readFile(path.join(codexHome, "config.toml"), "utf8");
+  assert.match(config, /sandbox_mode = "read-only"/);
+  assert.match(config, /approval_policy = "never"/);
+  assert.equal(/^service_tier =/m.test(config), false);
+
+  await runSwitchAccountSlashCommand("/switch-account 默认权限 工作区可写", switcher);
+  assert.equal((await switcher.getSettings()).sandboxMode, "workspace-write");
+});
+
 test("codex app server pid detection skips vscode and temporary stdio servers", () => {
   const output = [
     "100 1 /Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled",

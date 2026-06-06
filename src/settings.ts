@@ -75,6 +75,8 @@ export function updateSwitcherSettings(
   update: SwitcherSettingsUpdate,
 ): SwitcherSettings {
   const next = normalizeSwitcherSettings(current);
+  const hasManualModelOverride =
+    update.model !== undefined || update.modelReasoningEffort !== undefined || update.speedTier !== undefined;
   if (update.applyAfterSwitch !== undefined) {
     next.applyAfterSwitch = update.applyAfterSwitch;
   }
@@ -92,6 +94,12 @@ export function updateSwitcherSettings(
   }
   if (update.modelPreset !== undefined) {
     next.modelPreset = update.modelPreset ?? "custom";
+    if (next.modelPreset !== "custom") {
+      Object.assign(next, MODEL_PRESET_VALUES[next.modelPreset]);
+    }
+  }
+  if (hasManualModelOverride) {
+    next.modelPreset = "custom";
   }
   if (update.model !== undefined) {
     next.model = update.model?.trim() || undefined;
@@ -102,7 +110,7 @@ export function updateSwitcherSettings(
   if (update.speedTier !== undefined) {
     next.speedTier = update.speedTier ?? "standard";
   }
-  if (next.modelPreset !== "custom") {
+  if (!hasManualModelOverride && next.modelPreset !== "custom") {
     Object.assign(next, MODEL_PRESET_VALUES[next.modelPreset]);
   }
   next.updatedAt = new Date().toISOString();
