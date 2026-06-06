@@ -6,13 +6,13 @@
 
 ## 执行规则
 
-- 优先使用本仓库 `package.json` 里 `bin` 字段对应的已链接可执行文件；如果不可用且当前在本仓库构建后目录，可直接运行构建后的 CLI 文件。
+- 内部执行优先使用已链接的底层可执行文件 `codex-account-switcher`；如果不可用且当前在本仓库构建后目录，可直接运行 `dist/src/cli.js`。
 - 面向用户的回复保持中文。
 - 不要打印 `auth.json` 里的 token；报错只总结清洗后的错误。
 - 相对路径按当前对话工作目录解释。
 - 用户以 `/switch-account` 开头时，把完整 slash 消息交给底层 CLI，并追加 `--json`；总结返回的 `message`。
 - 如果 shell 或调用环境不方便传递 `/switch-account` 这个参数，可以退回兼容形式：调用底层 CLI 的 `slash "<去掉 /switch-account 后的文本>" --json`。
-- 不要把底层 CLI 前缀展示给用户；用户可见命令一律写成 `/switch-account ...`。
+- 不要把底层 CLI 前缀或内部执行命令展示给用户；用户可见命令一律写成 `/switch-account ...`。
 
 ## 能力映射
 

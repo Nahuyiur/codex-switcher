@@ -129,7 +129,7 @@ async function handleDefaults(args: ParsedArgs, switcher: AccountSwitcher): Prom
 
 function renderList(accounts: Awaited<ReturnType<AccountSwitcher["list"]>>): string {
   if (accounts.length === 0) {
-    return "暂无账号。可以运行 add-current 或 import --from <path>。";
+    return "暂无账号。可以运行 /switch-account 保存当前 <名称> 或 /switch-account import <auth.json路径> <名称>。";
   }
   return accounts
     .map((account) => {

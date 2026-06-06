@@ -17,7 +17,24 @@ codex plugin marketplace add Nahuyiur/codex-switcher --ref main
 codex plugin add codex-account-switcher@codex-switcher
 ```
 
-如果已经安装过旧版本，重新运行上面的构建和安装命令，并开一个新的 Codex 对话再使用新入口。
+这里的 `codex-account-switcher@codex-switcher` 是 Codex 插件包名，不是日常换号命令。日常使用时只需要在 Codex App 对话里发送 `/switch-account ...`。
+
+如果已经安装过旧版本，先重新构建并链接底层可执行文件，然后更新 marketplace：
+
+```bash
+npm run build
+npm link
+codex plugin marketplace upgrade codex-switcher
+```
+
+必要时移除后重新安装：
+
+```bash
+codex plugin remove codex-account-switcher@codex-switcher
+codex plugin add codex-account-switcher@codex-switcher
+```
+
+更新后建议开一个新的 Codex 对话再使用新入口。
 
 ## `/switch-account` 入口
 
@@ -45,10 +62,10 @@ codex plugin add codex-account-switcher@codex-switcher
 也支持部分中文短句。为保证稳定，建议保留 `/switch-account` 前缀：
 
 - “/switch-account 把当前 Codex 登录保存成主账号”
-- “/switch-account 从 `../codex-auths/backup.auth.json` 导入一个账号 叫备用账号”
+- “/switch-account 从 ../codex-auths/backup.auth.json 导入一个账号 叫备用账号”
 - “/switch-account 列出 Codex 账号和余额”
 - “/switch-account 刷新所有账号余额”
-- “/switch-account 切换到 `muka2`”
+- “/switch-account 切换到 muka2”
 - “/switch-account 切换到瓶颈余额最高的账号”
 - “/switch-account 默认权限 工作区可写”
 - “/switch-account 默认模型 smart”
