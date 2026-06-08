@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -131,6 +132,7 @@ test("store can import and switch auth snapshots", async () => {
   assert.match(config, /model_reasoning_effort = "xhigh"/);
   assert.match(config, /service_tier = "priority"/);
   assert.equal((await switcher.switchAccount(saved.id)).targetAccountId, saved.id);
+  assert.equal((await switcher.switchAccount("第二个")).targetAccountId, imported.id);
 });
 
 test("switch refreshes active auth and syncs refreshed snapshot", async () => {
@@ -154,7 +156,7 @@ test("switch refreshes active auth and syncs refreshed snapshot", async () => {
     codexHome,
     accountLibraryPath: store,
     codexCliPath: "./mock-codex.js",
-    appServerTimeoutMs: 1_000,
+    appServerTimeoutMs: 3_000,
   });
   const account = await switcher.importAuth("./target.auth.json", "目标账号");
   await switcher.updateSettings({ restartAppServerAfterSwitch: true });
@@ -166,6 +168,60 @@ test("switch refreshes active auth and syncs refreshed snapshot", async () => {
   assert.equal(result.appServerDaemonRestart?.success, true);
   assert.match(await fs.readFile(path.join(codexHome, "auth.json"), "utf8"), /new-token/);
   assert.match(await fs.readFile(path.join(store, account.snapshotFile), "utf8"), /new-token/);
+});
+
+test("switch verifies current Codex CLI account/read responses that still require OpenAI auth", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-switcher-current-cli-read-test-"));
+  const codexHome = path.join(root, "codex");
+  const store = path.join(root, "store");
+  const cli = path.join(root, "mock-codex.js");
+  await fs.mkdir(codexHome, { recursive: true });
+  await fs.writeFile(cli, mockCodexCli({ requiresOpenaiAuth: true }), "utf8");
+  await fs.chmod(cli, 0o755);
+  const authPath = path.join(root, "target.auth.json");
+  await fs.writeFile(
+    authPath,
+    JSON.stringify({ tokens: { id_token: jwt("target@example.com", "acct-target"), access_token: "old-token", refresh_token: "rt-old" } }),
+    "utf8",
+  );
+
+  const switcher = new AccountSwitcher({
+    baseDir: root,
+    codexHome,
+    accountLibraryPath: store,
+    codexCliPath: "./mock-codex.js",
+    appServerTimeoutMs: 3_000,
+  });
+  const account = await switcher.importAuth("./target.auth.json", "目标账号");
+
+  const result = await switcher.switchAccount(account.id);
+  assert.equal(result.verified, true);
+  assert.equal(result.refreshedAuthSnapshot, true);
+});
+
+test("CLI accepts positional labels and label selectors", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-switcher-cli-test-"));
+  const codexHome = path.join(root, "codex");
+  const store = path.join(root, "store");
+  await fs.mkdir(codexHome, { recursive: true });
+  const first = path.join(root, "first.auth.json");
+  const second = path.join(root, "second.auth.json");
+  await fs.writeFile(first, JSON.stringify({ tokens: { access_token: "a", refresh_token: "ra", account_id: "first" } }), "utf8");
+  await fs.writeFile(second, JSON.stringify({ tokens: { access_token: "b", refresh_token: "rb", account_id: "second" } }), "utf8");
+
+  const baseArgs = ["--codex-home", codexHome, "--store", store, "--codex-cli", "/missing/codex"];
+  const imported = JSON.parse(await runCli([...baseArgs, "import", first, "alpha label", "--json"], root));
+  assert.equal(imported.label, "alpha label");
+  const importedWithFlag = JSON.parse(await runCli([...baseArgs, "import", "--from", second, "--label", "beta", "--json"], root));
+  assert.equal(importedWithFlag.label, "beta");
+
+  const switched = JSON.parse(await runCli([...baseArgs, "switch", "beta", "--json"], root));
+  assert.equal(switched.diskAuthWritten, true);
+  assert.match(await fs.readFile(path.join(codexHome, "auth.json"), "utf8"), /second/);
+
+  const refreshed = await runCli([...baseArgs, "refresh-limits", "alpha", "--json"], root);
+  const accounts = JSON.parse(refreshed);
+  assert.equal(accounts.find((account: StoredAccount) => account.label === "alpha label")?.error?.length > 0, true);
 });
 
 test("switch keeps token-only account active after access token refresh", async () => {
@@ -189,7 +245,7 @@ test("switch keeps token-only account active after access token refresh", async 
     codexHome,
     accountLibraryPath: store,
     codexCliPath: "./mock-codex.js",
-    appServerTimeoutMs: 1_000,
+    appServerTimeoutMs: 3_000,
   });
   const account = await switcher.importAuth("./token-only.auth.json", "token-only");
   const result = await switcher.switchAccount(account.id);
@@ -340,7 +396,7 @@ test("slash command accepts documented Chinese phrases", async () => {
     "utf8",
   );
 
-  const switcher = new AccountSwitcher({ baseDir: root, codexHome, accountLibraryPath: store, codexCliPath: "./mock-codex.js", appServerTimeoutMs: 1_000 });
+  const switcher = new AccountSwitcher({ baseDir: root, codexHome, accountLibraryPath: store, codexCliPath: "./mock-codex.js", appServerTimeoutMs: 3_000 });
   assert.equal((await runSwitchAccountSlashCommand("/switch-account 把当前 Codex 登录保存成主账号", switcher)).action, "add-current");
   assert.equal((await runSwitchAccountSlashCommand("/switch-account 列出 Codex 账号和余额", switcher)).action, "list");
   assert.equal((await runSwitchAccountSlashCommand("/switch-account 切换到余额最多的账号", switcher)).action, "switch-best");
@@ -394,7 +450,20 @@ function jwt(email: string, accountId: string): string {
   return `x.${payload}.y`;
 }
 
-function mockCodexCli(options: { tokenOnly?: boolean } = {}): string {
+function runCli(args: string[], cwd: string): Promise<string> {
+  const cliPath = path.join(__dirname, "../src/cli.js");
+  return new Promise((resolve, reject) => {
+    execFile(process.execPath, [cliPath, ...args], { cwd, encoding: "utf8" }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(`${error.message}\n${stderr}`));
+      } else {
+        resolve(stdout);
+      }
+    });
+  });
+}
+
+function mockCodexCli(options: { tokenOnly?: boolean; requiresOpenaiAuth?: boolean } = {}): string {
   return `#!/usr/bin/env node
 const fs = require("node:fs");
 const path = require("node:path");
@@ -421,7 +490,7 @@ process.stdin.on("data", (chunk) => {
         id: message.id,
         result: {
           account: ${options.tokenOnly ? '{ type: "chatgpt" }' : '{ type: "chatgpt", email: "target@example.com", planType: "pro" }'},
-          requiresOpenaiAuth: false
+          requiresOpenaiAuth: ${options.requiresOpenaiAuth ? "true" : "false"}
         }
       }) + "\\n");
     } else if (message.method === "account/rateLimits/read") {

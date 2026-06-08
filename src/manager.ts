@@ -56,7 +56,7 @@ export class AccountSwitcher {
 
   async refreshLimits(accountId?: string): Promise<AccountSummary[]> {
     const store = await this.store.load();
-    const targets = accountId ? store.accounts.filter((account) => account.id === accountId) : store.accounts;
+    const targets = accountId ? [requireAccount(store.accounts, accountId)] : store.accounts;
     for (const account of targets) {
       await this.refreshOne(account);
     }
@@ -65,11 +65,7 @@ export class AccountSwitcher {
 
   async switchAccount(accountId: string): Promise<SwitchResult> {
     const store = await this.store.load();
-    const account = store.accounts.find((entry) => entry.id === accountId);
-    if (!account) {
-      throw new Error(`没有找到账号: ${accountId}`);
-    }
-    return this.switchTo(account);
+    return this.switchTo(requireAccount(store.accounts, accountId));
   }
 
   async switchBest(): Promise<SwitchResult> {
@@ -183,7 +179,7 @@ export class AccountSwitcher {
     const client = new AppServerClient(this.codexHome, this.options);
     try {
       const response = await client.readAccount(true);
-      if (!response.account || response.requiresOpenaiAuth) {
+      if (!response.account) {
         return { verified: false, snapshotUpdated: false };
       }
       if (account.email && response.account.email && account.email !== response.account.email) {
@@ -340,4 +336,40 @@ function describeBestAccount(account: StoredAccount): string {
     parts.push(`7天 ${Math.round(seven)}%`);
   }
   return parts.join("，");
+}
+
+function requireAccount(accounts: StoredAccount[], query: string | undefined): StoredAccount {
+  const match = findAccount(accounts, query);
+  if (match.account) {
+    return match.account;
+  }
+  if (match.ambiguous.length > 1) {
+    throw new Error(`账号名不够精确: ${query}。匹配到: ${match.ambiguous.map((entry) => entry.label).join("、")}`);
+  }
+  throw new Error(`没有找到账号: ${query}`);
+}
+
+function findAccount(
+  accounts: StoredAccount[],
+  query: string | undefined,
+): { account?: StoredAccount; ambiguous: StoredAccount[] } {
+  if (!query) {
+    return { ambiguous: [] };
+  }
+  const normalized = normalizeAccountQuery(query);
+  const exact = accounts.find((entry) => entry.id === query)
+    || accounts.find((entry) => entry.accountId === query)
+    || accounts.find((entry) => normalizeAccountQuery(entry.label) === normalized)
+    || accounts.find((entry) => entry.email?.toLowerCase() === normalized);
+  if (exact) {
+    return { account: exact, ambiguous: [] };
+  }
+  const partialMatches = accounts.filter((entry) => normalizeAccountQuery(entry.label).includes(normalized));
+  return partialMatches.length === 1
+    ? { account: partialMatches[0], ambiguous: [] }
+    : { ambiguous: partialMatches };
+}
+
+function normalizeAccountQuery(input: string): string {
+  return input.trim().replace(/[，。；：]/g, " ").replace(/\s+/g, " ").toLowerCase();
 }

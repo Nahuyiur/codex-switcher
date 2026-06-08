@@ -48,7 +48,8 @@ async function main(): Promise<void> {
       if (!from) {
         throw new Error("请提供 --from <path>。");
       }
-      const account = await switcher.importAuth(from, stringFlag(args, "label"));
+      const label = stringFlag(args, "label") || (stringFlag(args, "from") ? args.values.join(" ") : args.values.slice(1).join(" "));
+      const account = await switcher.importAuth(from, label || undefined);
       output(args, account, `已导入账号：${account.label}`);
       return;
     }
