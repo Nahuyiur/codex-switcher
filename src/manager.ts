@@ -56,7 +56,7 @@ export class AccountSwitcher {
 
   async refreshLimits(accountId?: string): Promise<AccountSummary[]> {
     const store = await this.store.load();
-    const targets = accountId ? [requireAccount(store.accounts, accountId)] : store.accounts;
+    const targets = accountId ? [this.resolveAccount(store.accounts, accountId)] : store.accounts;
     for (const account of targets) {
       await this.refreshOne(account);
     }
@@ -65,7 +65,7 @@ export class AccountSwitcher {
 
   async switchAccount(accountId: string): Promise<SwitchResult> {
     const store = await this.store.load();
-    return this.switchTo(requireAccount(store.accounts, accountId));
+    return this.switchTo(this.resolveAccount(store.accounts, accountId));
   }
 
   async switchBest(): Promise<SwitchResult> {
@@ -170,6 +170,47 @@ export class AccountSwitcher {
         appServerDaemonRestart,
       };
     });
+  }
+
+  private resolveAccount(accounts: StoredAccount[], text: string | undefined): StoredAccount {
+    const query = text?.trim();
+    if (!query) {
+      throw new Error("请提供账号名、邮箱或 id。");
+    }
+    const normalized = normalizeMatch(query);
+    const idMatches = accounts.filter((account) => account.id === query);
+    if (idMatches.length === 1) {
+      return idMatches[0];
+    }
+    if (idMatches.length > 1) {
+      throw new Error(`账号 id 不唯一：${query}`);
+    }
+
+    const labelMatches = accounts.filter((account) => normalizeMatch(account.label) === normalized);
+    if (labelMatches.length === 1) {
+      return labelMatches[0];
+    }
+    if (labelMatches.length > 1) {
+      throw new Error(`账号名不够精确：${query}。匹配到 ${labelMatches.length} 个同名账号，请使用邮箱或 id。`);
+    }
+
+    const emailMatches = accounts.filter((account) => account.email && account.email.toLowerCase() === normalized);
+    if (emailMatches.length === 1) {
+      return emailMatches[0];
+    }
+    if (emailMatches.length > 1) {
+      throw new Error(`账号邮箱不够精确：${query}。匹配到 ${emailMatches.length} 个账号，请使用 id。`);
+    }
+
+    const partialMatches = accounts.filter((account) => normalizeMatch(account.label).includes(normalized));
+    if (partialMatches.length === 1) {
+      return partialMatches[0];
+    }
+    if (partialMatches.length > 1) {
+      throw new Error(`账号名不够精确：${query}。匹配到：${partialMatches.map((account) => account.label).join("、")}`);
+    }
+    const labels = accounts.map((account) => account.label).join("、") || "暂无账号";
+    throw new Error(`没有找到账号：${query}。当前账号：${labels}`);
   }
 
   private async verifyAndRefreshActiveAccount(
@@ -283,6 +324,10 @@ function normalizeAuthText(input: string): string {
   return JSON.stringify(parseAuthJson(input));
 }
 
+function normalizeMatch(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 async function withLock<T>(lockDir: string, action: () => Promise<T>): Promise<T> {
   const started = Date.now();
   while (true) {
@@ -336,40 +381,4 @@ function describeBestAccount(account: StoredAccount): string {
     parts.push(`7天 ${Math.round(seven)}%`);
   }
   return parts.join("，");
-}
-
-function requireAccount(accounts: StoredAccount[], query: string | undefined): StoredAccount {
-  const match = findAccount(accounts, query);
-  if (match.account) {
-    return match.account;
-  }
-  if (match.ambiguous.length > 1) {
-    throw new Error(`账号名不够精确: ${query}。匹配到: ${match.ambiguous.map((entry) => entry.label).join("、")}`);
-  }
-  throw new Error(`没有找到账号: ${query}`);
-}
-
-function findAccount(
-  accounts: StoredAccount[],
-  query: string | undefined,
-): { account?: StoredAccount; ambiguous: StoredAccount[] } {
-  if (!query) {
-    return { ambiguous: [] };
-  }
-  const normalized = normalizeAccountQuery(query);
-  const exact = accounts.find((entry) => entry.id === query)
-    || accounts.find((entry) => entry.accountId === query)
-    || accounts.find((entry) => normalizeAccountQuery(entry.label) === normalized)
-    || accounts.find((entry) => entry.email?.toLowerCase() === normalized);
-  if (exact) {
-    return { account: exact, ambiguous: [] };
-  }
-  const partialMatches = accounts.filter((entry) => normalizeAccountQuery(entry.label).includes(normalized));
-  return partialMatches.length === 1
-    ? { account: partialMatches[0], ambiguous: [] }
-    : { ambiguous: partialMatches };
-}
-
-function normalizeAccountQuery(input: string): string {
-  return input.trim().replace(/[，。；：]/g, " ").replace(/\s+/g, " ").toLowerCase();
 }

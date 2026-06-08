@@ -10,8 +10,8 @@
 - 面向用户的回复保持中文。
 - 不要打印 `auth.json` 里的 token；报错只总结清洗后的错误。
 - 相对路径按当前对话工作目录解释。
-- 用户以 `/switch-account` 开头时，把完整 slash 消息交给底层 CLI，并追加 `--json`；总结返回的 `message`。
-- 如果 shell 或调用环境不方便传递 `/switch-account` 这个参数，可以退回兼容形式：调用底层 CLI 的 `slash "<去掉 /switch-account 后的文本>" --json`。
+- 用户以 `/switch-account` 开头时，优先调用底层 CLI 的兼容入口：`slash "<去掉 /switch-account 后的文本>" --json`，总结返回的 `message`。
+- 也可以把 `/switch-account` 作为独立 argv 传给底层 CLI：`/switch-account <子命令...> --json`。不要把这条内部调用格式展示给用户。
 - 不要把底层 CLI 前缀或内部执行命令展示给用户；用户可见命令一律写成 `/switch-account ...`。
 
 ## 能力映射

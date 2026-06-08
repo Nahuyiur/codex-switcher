@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as crypto from "node:crypto";
 import { AccountSwitcher } from "../manager";
 import { scoreAccount } from "../rateLimits";
 import {
@@ -31,8 +32,6 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(vscode.commands.registerCommand("codexAccountSwitcher.addCurrent", () => provider.addCurrent()));
   context.subscriptions.push(vscode.commands.registerCommand("codexAccountSwitcher.importAuth", () => provider.importAuth()));
   context.subscriptions.push(vscode.commands.registerCommand("codexAccountSwitcher.switchBest", () => provider.switchBest()));
-
-  provider.refresh(false).catch(() => undefined);
 }
 
 export function deactivate(): void {}
@@ -41,6 +40,7 @@ class AccountsViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
   private accounts: AccountSummary[] = [];
   private settings?: SwitcherSettings;
+  private loadError?: string;
 
   constructor(private readonly extensionUri: vscode.Uri) {}
 
@@ -56,12 +56,15 @@ class AccountsViewProvider implements vscode.WebviewViewProvider {
     try {
       const switcher = this.switcher();
       [this.accounts, this.settings] = await Promise.all([switcher.list(), switcher.getSettings()]);
+      this.loadError = undefined;
       this.update();
       if (showMessage) {
         vscode.window.showInformationMessage("账号列表已刷新。");
       }
     } catch (error) {
-      vscode.window.showErrorMessage(`刷新失败：${sanitizeError(error)}`);
+      this.loadError = sanitizeError(error);
+      this.update();
+      vscode.window.showErrorMessage(`刷新失败：${this.loadError}`);
     }
   }
 
@@ -208,20 +211,32 @@ class AccountsViewProvider implements vscode.WebviewViewProvider {
     }
     const active = this.accounts.find((account) => account.active);
     const model = this.settings?.model || "默认模型";
-    statusBar.text = active ? `$(account) Codex: ${active.label} · ${model}` : "$(account) Codex: 未保存账号";
-    statusBar.tooltip = "打开 Codex 账号切换器";
+    statusBar.text = this.loadError
+      ? "$(error) Codex: 读取失败"
+      : active
+        ? `$(account) Codex: ${active.label} · ${model}`
+        : "$(account) Codex: 未保存账号";
+    statusBar.tooltip = this.loadError ? `刷新 Codex 账号列表：${this.loadError}` : "刷新 Codex 账号列表";
     statusBar.show();
   }
 
   private render(): string {
-    const nonce = String(Date.now());
+    const nonce = crypto.randomBytes(16).toString("base64");
     const active = this.accounts.find((account) => account.active);
     const rows = this.accounts.length
       ? this.accounts.map((account) => renderAccount(account)).join("")
+      : this.loadError
+        ? `<div class="empty error-state">
+            <div class="empty-title">账号库读取失败</div>
+            <div class="empty-text">${escapeHtml(this.loadError)}</div>
+          </div>`
       : `<div class="empty">
           <div class="empty-title">暂无账号</div>
           <div class="empty-text">保存当前账号，或导入已有 auth.json。</div>
         </div>`;
+    const errorBanner = this.loadError && this.accounts.length
+      ? `<div class="global-error">${escapeHtml(this.loadError)}</div>`
+      : "";
     return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -266,9 +281,12 @@ class AccountsViewProvider implements vscode.WebviewViewProvider {
     .actions { display: flex; justify-content: flex-end; margin-top: 9px; }
     .actions button { padding: 5px 10px; }
     .error { color: var(--vscode-errorForeground); font-size: 11px; margin-top: 7px; }
+    .global-error { border: 1px solid var(--vscode-inputValidation-errorBorder); background: var(--vscode-inputValidation-errorBackground); color: var(--vscode-errorForeground); border-radius: 8px; padding: 8px; font-size: 11px; margin-bottom: 10px; }
     .empty { border: 1px dashed var(--vscode-panel-border); border-radius: 8px; padding: 18px 12px; text-align: center; }
+    .empty.error-state { border-color: var(--vscode-inputValidation-errorBorder); }
     .empty-title { font-weight: 600; margin-bottom: 5px; }
     .empty-text { color: var(--vscode-descriptionForeground); font-size: 12px; }
+    .error-state .empty-text { color: var(--vscode-errorForeground); }
   </style>
 </head>
 <body>
@@ -286,6 +304,7 @@ class AccountsViewProvider implements vscode.WebviewViewProvider {
     <button data-command="addCurrent">保存当前</button>
     <button data-command="importAuth">导入 auth</button>
   </div>
+  ${errorBanner}
   ${renderSettingsPanel(this.settings)}
   <div class="section-title"><span>账号</span><span>${this.accounts.length} 个</span></div>
   <div class="accounts">${rows}</div>

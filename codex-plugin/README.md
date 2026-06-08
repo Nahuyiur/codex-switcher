@@ -10,7 +10,7 @@ npm run build
 npm link
 ```
 
-然后安装插件：
+然后安装插件。GitHub marketplace 只安装 Codex skill/plugin 元数据；真正读写账号的底层命令仍依赖上面的本机 checkout、`npm run build` 和 `npm link`。
 
 ```bash
 codex plugin marketplace add Nahuyiur/codex-switcher --ref main
@@ -18,6 +18,12 @@ codex plugin add codex-account-switcher@codex-switcher
 ```
 
 这里的 `codex-account-switcher@codex-switcher` 是 Codex 插件包名，不是日常换号命令。日常使用时只需要在 Codex App 对话里发送 `/switch-account ...`。
+
+安装后开一个新的 Codex 对话，发送下面这条消息验证入口是否生效：
+
+```text
+/switch-account help
+```
 
 如果已经安装过旧版本，先重新构建并链接底层可执行文件，然后更新 marketplace：
 
@@ -34,7 +40,7 @@ codex plugin remove codex-account-switcher@codex-switcher
 codex plugin add codex-account-switcher@codex-switcher
 ```
 
-更新后建议开一个新的 Codex 对话再使用新入口。
+`marketplace upgrade` 只刷新 marketplace snapshot；如果已经安装了旧插件，`remove` / `add` 会刷新 installed plugin cache。更新后建议开一个新的 Codex 对话再使用新入口。
 
 ## `/switch-account` 入口
 

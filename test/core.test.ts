@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile as execFileCallback } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -10,11 +10,17 @@ import { parseAuthJson, sanitizeError, stableAuthHash, summarizeAuth } from "../
 import { StoredAccount } from "../src/types";
 import { updateTopLevelToml } from "../src/codexConfig";
 import { findCodexAppServerPids } from "../src/appServerRestart";
+import { SWITCHER_VERSION } from "../src/appServerClient";
 import { runSwitchAccountSlashCommand, stripCommandName } from "../src/slashCommand";
 
 test("auth parsing rejects malformed auth files", () => {
   assert.throws(() => parseAuthJson("{"), /不是合法 JSON/);
   assert.throws(() => parseAuthJson("{}"), /没有找到/);
+});
+
+test("app-server client metadata version matches package version", async () => {
+  const pkg = JSON.parse(await fs.readFile(path.resolve("package.json"), "utf8"));
+  assert.equal(SWITCHER_VERSION, pkg.version);
 });
 
 test("JWT metadata is extracted without exposing tokens", () => {
@@ -380,6 +386,133 @@ test("slash command import flags and account matching are strict", async () => {
     () => runSwitchAccountSlashCommand("/switch-account switch team", switcher),
     /账号名不够精确/,
   );
+
+  const refreshed = await runSwitchAccountSlashCommand("/switch-account refresh", switcher);
+  assert.match(refreshed.message, /瓶颈 未知/);
+  assert.match(refreshed.message, /余额读取失败/);
+});
+
+test("slash command tolerates markdown wrapped account names and optional boolean flags", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-switcher-slash-polish-test-"));
+  const codexHome = path.join(root, "codex");
+  const store = path.join(root, "store");
+  await fs.mkdir(codexHome, { recursive: true });
+  const authPath = path.join(root, "wrapped.auth.json");
+  await fs.writeFile(authPath, JSON.stringify({ tokens: { access_token: "a", refresh_token: "ra", account_id: "wrapped" } }), "utf8");
+  await fs.copyFile(authPath, path.join(codexHome, "auth.json"));
+
+  const switcher = new AccountSwitcher({ codexHome, accountLibraryPath: store, codexCliPath: "/missing/codex", appServerTimeoutMs: 25 });
+  await runSwitchAccountSlashCommand("/switch-account 保存当前 `wrapped`", switcher);
+  const switched = await runSwitchAccountSlashCommand("/switch-account switch `wrapped`", switcher);
+  assert.equal(switched.action, "switch");
+
+  const configured = await runSwitchAccountSlashCommand(
+    "/switch-account defaults set --restart-app-server-after-switch --app-server-restart-mode daemon",
+    switcher,
+  );
+  assert.equal(configured.action, "defaults-set");
+  const settings = await switcher.getSettings();
+  assert.equal(settings.restartAppServerAfterSwitch, true);
+  assert.equal(settings.appServerRestartMode, "daemon");
+
+  const disabled = await runSwitchAccountSlashCommand("/switch-account auto-refresh off", switcher);
+  assert.equal(disabled.action, "defaults-runtime-refresh");
+  const disabledSettings = await switcher.getSettings();
+  assert.equal(disabledSettings.restartAppServerAfterSwitch, false);
+  assert.equal(disabledSettings.appServerRestartMode, "daemon");
+});
+
+test("switching by duplicate label requires a more precise selector", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-switcher-duplicate-label-test-"));
+  const codexHome = path.join(root, "codex");
+  const store = path.join(root, "store");
+  await fs.mkdir(codexHome, { recursive: true });
+  const first = path.join(root, "first.auth.json");
+  const second = path.join(root, "second.auth.json");
+  await fs.writeFile(first, JSON.stringify({ tokens: { access_token: "a", refresh_token: "ra", account_id: "first" } }), "utf8");
+  await fs.writeFile(second, JSON.stringify({ tokens: { access_token: "b", refresh_token: "rb", account_id: "second" } }), "utf8");
+
+  const switcher = new AccountSwitcher({ codexHome, accountLibraryPath: store, codexCliPath: "/missing/codex", appServerTimeoutMs: 25 });
+  await switcher.importAuth(first, "dup");
+  await switcher.importAuth(second, "dup");
+
+  await assert.rejects(() => runSwitchAccountSlashCommand("/switch-account switch dup", switcher), /账号名不够精确/);
+});
+
+test("cli handles global flags before commands and legacy slash compatibility", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-switcher-cli-test-"));
+  const codexHome = path.join(root, "codex");
+  const store = path.join(root, "store");
+  await fs.mkdir(codexHome, { recursive: true });
+  const first = path.join(root, "one.auth.json");
+  const second = path.join(root, "two.auth.json");
+  const third = path.join(root, "three.auth.json");
+  await fs.writeFile(first, JSON.stringify({ tokens: { access_token: "a", refresh_token: "ra", account_id: "one" } }), "utf8");
+  await fs.writeFile(second, JSON.stringify({ tokens: { access_token: "b", refresh_token: "rb", account_id: "two" } }), "utf8");
+  await fs.writeFile(third, JSON.stringify({ tokens: { access_token: "c", refresh_token: "rc", account_id: "three" } }), "utf8");
+  await fs.copyFile(first, path.join(codexHome, "auth.json"));
+
+  assert.deepEqual(JSON.parse(await runCli(["--json", "list", "--codex-home", codexHome, "--store", store])), []);
+
+  const saved = JSON.parse(await runCli(["--codex-home", codexHome, "--store", store, "/switch-account", "保存当前", "one", "--json"]));
+  assert.equal(saved.action, "add-current");
+
+  const imported = JSON.parse(await runCli([
+    "--codex-home",
+    codexHome,
+    "--store",
+    store,
+    "slash",
+    "import",
+    "--label",
+    "two",
+    "--from",
+    second,
+    "--json",
+  ]));
+  assert.equal(imported.action, "import");
+
+  const positionalImport = JSON.parse(await runCli(["import", third, "three", "--codex-home", codexHome, "--store", store, "--json"]));
+  assert.equal(positionalImport.label, "three");
+
+  const switched = JSON.parse(await runCli(["switch", "three", "--codex-home", codexHome, "--store", store, "--json"]));
+  assert.equal(switched.targetAccountId, positionalImport.id);
+
+  const listed = JSON.parse(await runCli(["slash", "list", "--codex-home", codexHome, "--store", store, "--json"]));
+  assert.equal(listed.action, "list");
+  assert.equal(listed.result.length, 3);
+
+  const quoted = JSON.parse(await runCli(["/switch-account list", "--codex-home", codexHome, "--store", store, "--json"]));
+  assert.equal(quoted.action, "list");
+  assert.equal(quoted.result.length, 3);
+
+  const jsonEquals = JSON.parse(await runCli(["/switch-account", "list", "--codex-home", codexHome, "--store", store, "--json=true"]));
+  assert.equal(jsonEquals.action, "list");
+  assert.equal(jsonEquals.result.length, 3);
+
+  await assert.rejects(
+    () => runCli(["refresh-limits", "missing", "--codex-home", codexHome, "--store", store, "--json"]),
+    /没有找到账号：missing/,
+  );
+});
+
+test("cli returns machine-readable help and json errors", async () => {
+  const help = JSON.parse(await runCli(["help", "--json"]));
+  assert.equal(help.action, "help");
+  assert.match(help.message, /\/switch-account list/);
+
+  const helpWithGlobalFlag = JSON.parse(await runCli(["--json", "help"]));
+  assert.equal(helpWithGlobalFlag.action, "help");
+
+  const unknown = await runCliProcess(["nope", "--json"]);
+  assert.notEqual(unknown.code, 0);
+  assert.equal(JSON.parse(unknown.stdout).ok, false);
+  assert.match(JSON.parse(unknown.stdout).error, /未知命令：nope/);
+
+  const invalid = await runCliProcess(["defaults", "preset", "invalid", "--json"]);
+  assert.notEqual(invalid.code, 0);
+  assert.equal(JSON.parse(invalid.stdout).ok, false);
+  assert.match(JSON.parse(invalid.stdout).error, /模型预设/);
 });
 
 test("slash command accepts documented Chinese phrases", async () => {
@@ -450,19 +583,6 @@ function jwt(email: string, accountId: string): string {
   return `x.${payload}.y`;
 }
 
-function runCli(args: string[], cwd: string): Promise<string> {
-  const cliPath = path.join(__dirname, "../src/cli.js");
-  return new Promise((resolve, reject) => {
-    execFile(process.execPath, [cliPath, ...args], { cwd, encoding: "utf8" }, (error, stdout, stderr) => {
-      if (error) {
-        reject(new Error(`${error.message}\n${stderr}`));
-      } else {
-        resolve(stdout);
-      }
-    });
-  });
-}
-
 function mockCodexCli(options: { tokenOnly?: boolean; requiresOpenaiAuth?: boolean } = {}): string {
   return `#!/usr/bin/env node
 const fs = require("node:fs");
@@ -513,4 +633,28 @@ process.stdin.on("data", (chunk) => {
   }
 });
 `;
+}
+
+async function runCli(args: string[], cwd = path.resolve(".")): Promise<string> {
+  const result = await runCliProcess(args, cwd);
+  if (result.code !== 0) {
+    throw new Error([`exit ${result.code}`, result.stdout, result.stderr].filter(Boolean).join("\n"));
+  }
+  return result.stdout;
+}
+
+function runCliProcess(args: string[], cwd = path.resolve(".")): Promise<{ code: number; stdout: string; stderr: string }> {
+  const cli = path.resolve("dist/src/cli.js");
+  return new Promise((resolve) => {
+    execFileCallback(process.execPath, [cli, ...args], {
+      cwd,
+      env: { ...process.env, CODEX_HOME: undefined, CODEX_ACCOUNT_SWITCHER_HOME: undefined },
+    }, (error, stdout, stderr) => {
+      resolve({
+        code: typeof (error as NodeJS.ErrnoException | null)?.code === "number" ? Number((error as NodeJS.ErrnoException).code) : error ? 1 : 0,
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+      });
+    });
+  });
 }

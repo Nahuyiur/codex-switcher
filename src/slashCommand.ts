@@ -77,10 +77,13 @@ export async function runSwitchAccountSlashCommand(
 
   const refreshRuntime = parseRuntimeRefresh(body);
   if (refreshRuntime) {
-    const settings = await switcher.updateSettings({
+    const update: SwitcherSettingsUpdate = {
       restartAppServerAfterSwitch: refreshRuntime.enabled,
-      appServerRestartMode: refreshRuntime.mode,
-    });
+    };
+    if (refreshRuntime.mode) {
+      update.appServerRestartMode = refreshRuntime.mode;
+    }
+    const settings = await switcher.updateSettings(update);
     return {
       action: "defaults-runtime-refresh",
       message: refreshRuntime.enabled
@@ -97,8 +100,7 @@ export async function runSwitchAccountSlashCommand(
 
   const target = parseSwitchTarget(body);
   if (target) {
-    const account = await findAccountByText(switcher, target);
-    const result = await switcher.switchAccount(account.id);
+    const result = await switcher.switchAccount(target);
     return { action: "switch", message: result.message, result };
   }
 
@@ -140,7 +142,7 @@ function parseImport(input: string): { path: string; label?: string } | undefine
   const normalized = normalize(input);
   const chinese = /^从\s+(.+?)\s+导入(?:一个)?账号(?:\s*(?:叫|命名为|label)\s*(.+))?$/i.exec(normalized);
   if (chinese) {
-    return { path: chinese[1].trim(), label: cleanLabel(chinese[2] || "") || undefined };
+    return { path: cleanPathText(chinese[1]), label: cleanLabel(chinese[2] || "") || undefined };
   }
 
   const parts = splitArgs(normalized);
@@ -156,13 +158,16 @@ function parseImport(input: string): { path: string; label?: string } | undefine
   const label = labelIndex >= 0
     ? collectUntilFlag(parts, labelIndex + 1).join(" ")
     : collectUntilFlag(parts, fromIndex >= 0 ? fromIndex + 2 : 2).join(" ");
-  return { path, label: cleanLabel(label) || undefined };
+  return { path: cleanPathText(path), label: cleanLabel(label) || undefined };
 }
 
-function parseRuntimeRefresh(input: string): { enabled: boolean; mode: "auto" | "daemon" | "codex-app" } | undefined {
+function parseRuntimeRefresh(input: string): { enabled: boolean; mode?: "auto" | "daemon" | "codex-app" } | undefined {
   const normalized = normalize(input);
   if (/^(关闭|禁用|disable|off).*(运行态|app-server|刷新|重启)/i.test(normalized)) {
-    return { enabled: false, mode: "auto" };
+    return { enabled: false };
+  }
+  if (/^auto-refresh\s+(off|false|no|关闭|禁用)$/i.test(normalized)) {
+    return { enabled: false };
   }
   if (/^(auto-refresh|自动刷新运行态|切换后自动刷新|切换账号后自动刷新|自动重启|切换账号后自动重启)/i.test(normalized)) {
     const mode = normalized.includes("daemon") ? "daemon" : normalized.includes("codex-app") ? "codex-app" : "auto";
@@ -306,8 +311,9 @@ function parseDefaultsUpdateParts(parts: string[]): { update: SwitcherSettingsUp
       }
       case "--apply-after-switch":
       case "切换后应用": {
-        update.applyAfterSwitch = parseBoolean(next);
-        index++;
+        const parsed = parseOptionalBoolean(parts, index);
+        update.applyAfterSwitch = parsed.value;
+        index = parsed.index;
         break;
       }
       case "--no-apply-after-switch":
@@ -317,8 +323,9 @@ function parseDefaultsUpdateParts(parts: string[]): { update: SwitcherSettingsUp
       }
       case "--restart-app-server-after-switch":
       case "运行态刷新": {
-        update.restartAppServerAfterSwitch = parseBoolean(next);
-        index++;
+        const parsed = parseOptionalBoolean(parts, index);
+        update.restartAppServerAfterSwitch = parsed.value;
+        index = parsed.index;
         break;
       }
       case "--no-restart-app-server-after-switch":
@@ -449,7 +456,10 @@ function renderSlashList(accounts: AccountSummary[]): string {
       const five = account.windows.find((window) => window.kind === "5h");
       const seven = account.windows.find((window) => window.kind === "7d");
       const active = account.active ? "当前" : "可切换";
-      return `${active}  ${account.label}  5小时 ${formatWindow(five)}  7天 ${formatWindow(seven)}  瓶颈 ${Math.max(0, Math.round(scoreAccount(account)))}%`;
+      const score = scoreAccount(account);
+      const bottleneck = score < 0 ? "未知" : `${Math.max(0, Math.round(score))}%`;
+      const error = account.error ? `  余额读取失败：${account.error}` : "";
+      return `${active}  ${account.label}  5小时 ${formatWindow(five)}  7天 ${formatWindow(seven)}  瓶颈 ${bottleneck}${error}`;
     })
     .join("\n");
 }
@@ -508,11 +518,19 @@ function normalize(input: string): string {
 }
 
 function cleanTargetText(input: string): string {
-  return normalize(input).replace(/^(到|账号)\s+/, "").replace(/\s+账号$/, "").trim();
+  return stripWrappingMarkup(normalize(input).replace(/^(到|账号)\s+/, "").replace(/\s+账号$/, "").trim());
 }
 
 function cleanLabel(input: string): string {
-  return normalize(input).replace(/^(叫|命名为|label)\s+/i, "").trim();
+  return stripWrappingMarkup(normalize(input).replace(/^(叫|命名为|label)\s+/i, "").trim());
+}
+
+function cleanPathText(input: string): string {
+  return stripWrappingMarkup(normalize(input));
+}
+
+function stripWrappingMarkup(input: string): string {
+  return input.replace(/^`(.+)`$/, "$1").trim();
 }
 
 function splitArgs(input: string): string[] {
@@ -623,6 +641,18 @@ function parseBoolean(value: string | undefined): boolean {
     return false;
   }
   throw new Error("布尔值只能是 true 或 false。");
+}
+
+function parseOptionalBoolean(parts: string[], index: number): { value: boolean; index: number } {
+  const next = parts[index + 1];
+  if (next && !next.startsWith("--") && isBooleanText(next)) {
+    return { value: parseBoolean(next), index: index + 1 };
+  }
+  return { value: true, index };
+}
+
+function isBooleanText(value: string): boolean {
+  return /^(1|0|true|false|yes|no|on|off|启用|开启|禁用|关闭)$/i.test(value);
 }
 
 function normalizeSandboxAlias(value: string): SandboxMode | undefined {

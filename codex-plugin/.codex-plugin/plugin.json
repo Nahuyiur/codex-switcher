@@ -1,6 +1,6 @@
 {
   "name": "codex-account-switcher",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "在 Codex App 中辅助保存、导入、刷新余额并切换 Codex 账号。",
   "author": {
     "name": "Nahuyiur"

@@ -3,6 +3,8 @@ import { EventEmitter } from "node:events";
 import { AccountReadResponse, ManagerOptions, RateLimitsReadResponse } from "./types";
 import { resolveCodexCli } from "./paths";
 
+export const SWITCHER_VERSION = "0.1.2";
+
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -37,7 +39,7 @@ export class AppServerClient {
       this.rejectAll(new Error(`Codex app-server 已退出，退出码 ${code ?? "unknown"}`));
     });
     await this.request("initialize", {
-      clientInfo: { name: "codex-account-switcher", title: "Codex 账号切换器", version: "0.1.0" },
+      clientInfo: { name: "codex-account-switcher", title: "Codex 账号切换器", version: SWITCHER_VERSION },
       capabilities: null,
     });
     this.notify("initialized");

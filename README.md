@@ -84,7 +84,7 @@ codex plugin marketplace add Nahuyiur/codex-switcher --ref main
 codex plugin add codex-account-switcher@codex-switcher
 ```
 
-Codex 插件负责让 Codex App 识别 `/switch-account ...` 消息；实际读写账号仍依赖上面 `npm run build` 和 `npm link` 链接好的本地可执行文件。
+Codex 插件提供 skill 规则，让 Codex App 把 `/switch-account ...` 当普通消息处理；实际读写账号仍依赖上面 `npm run build` 和 `npm link` 链接好的本地可执行文件。
 
 如果之前已经安装过旧版本，先重新构建并链接 CLI，然后更新 marketplace：
 
@@ -275,13 +275,13 @@ UI、日志和错误信息不会显示 token。账号快照文件本身仍然是
 仓库根目录已经放了可直接安装的 VSIX 包：
 
 ```text
-codex-account-switcher-0.1.1.vsix
+codex-account-switcher-0.1.2.vsix
 ```
 
 安装方式：
 
 - VS Code 里打开 Extensions 面板，选择 “Install from VSIX...”，然后选中这个文件。
-- 或者在终端里运行 `code --install-extension codex-account-switcher-0.1.1.vsix`。
+- 或者在终端里运行 `code --install-extension codex-account-switcher-0.1.2.vsix`。
 
 开发者需要重新打包时再运行：
 

@@ -38,18 +38,26 @@ async function main(): Promise<void> {
   }
 
   switch (args.command) {
+    case undefined:
+    case "help":
+    case "-h":
+    case "--help": {
+      printHelp(args);
+      return;
+    }
     case "add-current": {
       const account = await switcher.addCurrent(stringFlag(args, "label"));
       output(args, account, `已保存当前账号：${account.label}`);
       return;
     }
     case "import": {
-      const from = stringFlag(args, "from") || args.values[0];
+      const fromFlag = stringFlag(args, "from");
+      const from = fromFlag || args.values[0];
       if (!from) {
         throw new Error("请提供 --from <path>。");
       }
-      const label = stringFlag(args, "label") || (stringFlag(args, "from") ? args.values.join(" ") : args.values.slice(1).join(" "));
-      const account = await switcher.importAuth(from, label || undefined);
+      const positionalLabel = fromFlag ? args.values.join(" ") : args.values.slice(1).join(" ");
+      const account = await switcher.importAuth(from, stringFlag(args, "label") || positionalLabel || undefined);
       output(args, account, `已导入账号：${account.label}`);
       return;
     }
@@ -69,7 +77,7 @@ async function main(): Promise<void> {
       return;
     }
     case "slash": {
-      const result = await runSwitchAccountSlashCommand(rawArgv.slice(1).filter((part) => part !== "--json").join(" "), switcher);
+      const result = await runSwitchAccountSlashCommand(readLegacySlashText(rawArgv), switcher);
       output(args, result, result.message);
       return;
     }
@@ -88,7 +96,7 @@ async function main(): Promise<void> {
       return;
     }
     default:
-      printHelp();
+      throw new Error(`未知命令：${args.command}。请使用 /switch-account help 查看用法。`);
   }
 }
 
@@ -138,13 +146,18 @@ function renderList(accounts: Awaited<ReturnType<AccountSwitcher["list"]>>): str
       const seven = account.windows.find((window) => window.kind === "7d");
       const active = account.active ? "当前" : "    ";
       const error = account.error ? `  余额读取失败：${account.error}` : "";
-      return `${active}  ${account.label}  5小时 ${formatWindow(five)}  7天 ${formatWindow(seven)}  瓶颈 ${Math.max(0, Math.round(scoreAccount(account)))}%${error}`;
+      return `${active}  ${account.label}  5小时 ${formatWindow(five)}  7天 ${formatWindow(seven)}  瓶颈 ${formatScore(account)}${error}`;
     })
     .join("\n");
 }
 
+function formatScore(account: Awaited<ReturnType<AccountSwitcher["list"]>>[number]): string {
+  const score = scoreAccount(account);
+  return score < 0 ? "未知" : `${Math.max(0, Math.round(score))}%`;
+}
+
 function output(args: ParsedArgs, value: unknown, text: string): void {
-  if (args.flags.json) {
+  if (jsonFlag(args)) {
     process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
   } else {
     process.stdout.write(`${text}\n`);
@@ -253,7 +266,15 @@ function parseArgs(argv: string[]): ParsedArgs {
       const [rawKey, rawValue] = part.slice(2).split("=", 2);
       if (rawValue != null) {
         parsed.flags[rawKey] = rawValue;
-      } else if (argv[index + 1] && !argv[index + 1].startsWith("--")) {
+      } else if (BOOLEAN_FLAGS.has(rawKey)) {
+        parsed.flags[rawKey] = true;
+      } else if (OPTIONAL_BOOLEAN_FLAGS.has(rawKey)) {
+        if (argv[index + 1] && isBooleanLiteral(argv[index + 1])) {
+          parsed.flags[rawKey] = argv[++index];
+        } else {
+          parsed.flags[rawKey] = true;
+        }
+      } else if (VALUE_FLAGS.has(rawKey) && argv[index + 1] && !argv[index + 1].startsWith("--")) {
         parsed.flags[rawKey] = argv[++index];
       } else {
         parsed.flags[rawKey] = true;
@@ -270,7 +291,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 }
 
 function readRawSlashCommand(argv: string[]): { text: string; json: boolean } | undefined {
-  const commandIndex = argv.findIndex((part) => part === "/switch-account");
+  const commandIndex = argv.findIndex((part) => part === "/switch-account" || /^\/switch-account\s+/i.test(part));
   if (commandIndex < 0) {
     return undefined;
   }
@@ -281,15 +302,78 @@ function readRawSlashCommand(argv: string[]): { text: string; json: boolean } | 
   };
 }
 
+function readLegacySlashText(argv: string[]): string {
+  const commandIndex = findCommandIndex(argv, "slash");
+  if (commandIndex < 0) {
+    return "";
+  }
+  return stripSlashGlobalArgs(argv.slice(commandIndex + 1)).join(" ");
+}
+
+const VALUE_FLAGS = new Set([
+  "codex-home",
+  "store",
+  "codex-cli",
+  "label",
+  "from",
+  "sandbox",
+  "approval",
+  "preset",
+  "model",
+  "effort",
+  "speed",
+  "app-server-restart-mode",
+]);
+
+const BOOLEAN_FLAGS = new Set([
+  "best",
+  "all",
+  "no-apply-after-switch",
+  "no-restart-app-server-after-switch",
+]);
+
+const OPTIONAL_BOOLEAN_FLAGS = new Set([
+  "json",
+  "apply-after-switch",
+  "restart-app-server-after-switch",
+]);
+
+function findCommandIndex(argv: string[], command: string): number {
+  for (let index = 0; index < argv.length; index++) {
+    const part = argv[index];
+    if (part.startsWith("--")) {
+      const [key, rawValue] = part.slice(2).split("=", 2);
+      if (rawValue != null || BOOLEAN_FLAGS.has(key)) {
+        continue;
+      }
+      if (OPTIONAL_BOOLEAN_FLAGS.has(key)) {
+        if (argv[index + 1] && isBooleanLiteral(argv[index + 1])) {
+          index++;
+        }
+        continue;
+      }
+      if (VALUE_FLAGS.has(key) && argv[index + 1] && !argv[index + 1].startsWith("--")) {
+        index++;
+      }
+      continue;
+    }
+    return part === command ? index : -1;
+  }
+  return -1;
+}
+
 function stripSlashGlobalArgs(argv: string[]): string[] {
   const output: string[] = [];
   const globalFlagsWithValue = new Set(["--codex-home", "--store", "--codex-cli"]);
   for (let index = 0; index < argv.length; index++) {
     const part = argv[index];
-    if (part === "--json") {
+    const [key] = part.split("=", 1);
+    if (key === "--json") {
+      if (!part.includes("=") && argv[index + 1] && isBooleanLiteral(argv[index + 1])) {
+        index++;
+      }
       continue;
     }
-    const [key] = part.split("=", 1);
     if (globalFlagsWithValue.has(key)) {
       if (!part.includes("=")) {
         index++;
@@ -301,9 +385,30 @@ function stripSlashGlobalArgs(argv: string[]): string[] {
   return output;
 }
 
+function isBooleanLiteral(value: string): boolean {
+  return /^(1|0|true|false|yes|no|on|off|启用|开启|禁用|关闭)$/i.test(value);
+}
+
 function stringFlag(args: ParsedArgs, key: string): string | undefined {
   const value = args.flags[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function jsonFlag(args: ParsedArgs): boolean {
+  const value = args.flags.json;
+  if (value === undefined) {
+    return false;
+  }
+  if (value === true) {
+    return true;
+  }
+  if (/^(1|true|yes|on|启用|开启)$/i.test(value)) {
+    return true;
+  }
+  if (/^(0|false|no|off|禁用|关闭)$/i.test(value)) {
+    return false;
+  }
+  return true;
 }
 
 function booleanFlag(args: ParsedArgs, key: string): boolean | undefined {
@@ -323,25 +428,16 @@ function booleanFlag(args: ParsedArgs, key: string): boolean | undefined {
   throw new Error(`--${key} 只能是 true 或 false。`);
 }
 
-function printHelp(): void {
-  process.stdout.write(`Codex 账号切换器
+function printHelp(args: ParsedArgs): void {
+  const text = helpText();
+  output(args, { action: "help", message: text, result: { examples: HELP_EXAMPLES } }, text);
+}
+
+function helpText(): string {
+  return `Codex 账号切换器
 
 在 Codex App 对话里发送:
-  /switch-account 保存当前 主账号
-  /switch-account import ../codex-auths/backup.auth.json 备用账号
-  /switch-account list
-  /switch-account refresh
-  /switch-account switch muka2
-  /switch-account best
-  /switch-account status
-  /switch-account auto-refresh
-  /switch-account 关闭自动刷新运行态
-  /switch-account defaults show
-  /switch-account defaults preset smart
-  /switch-account defaults set --sandbox workspace-write --approval on-request --speed fast
-  /switch-account defaults set --model gpt-5.5 --effort xhigh --speed fast
-  /switch-account defaults apply
-  /switch-account help
+${HELP_EXAMPLES.map((example) => `  ${example}`).join("\n")}
 
 开发者说明:
   底层 CLI 仍支持脚本调用和 JSON 输出，但面向用户的复制命令统一使用 /switch-account ...。
@@ -350,10 +446,34 @@ function printHelp(): void {
   --codex-home <path>   指定目标 CODEX_HOME，支持 ~ 和相对路径
   --store <path>        指定账号库路径，支持 ~ 和相对路径
   --codex-cli <path>    指定 codex CLI 路径；裸命令走 PATH，路径支持 ~ 和相对路径
-`);
+`;
 }
 
+const HELP_EXAMPLES = [
+  "/switch-account 保存当前 主账号",
+  "/switch-account import ../codex-auths/backup.auth.json 备用账号",
+  "/switch-account list",
+  "/switch-account refresh",
+  "/switch-account switch muka2",
+  "/switch-account best",
+  "/switch-account status",
+  "/switch-account auto-refresh",
+  "/switch-account 关闭自动刷新运行态",
+  "/switch-account defaults show",
+  "/switch-account defaults preset smart",
+  "/switch-account defaults set --sandbox workspace-write --approval on-request --speed fast",
+  "/switch-account defaults set --model gpt-5.5 --effort xhigh --speed fast",
+  "/switch-account defaults apply",
+  "/switch-account help",
+];
+
 main().catch((error) => {
-  process.stderr.write(`${sanitizeError(error)}\n`);
+  const message = sanitizeError(error);
+  const args = parseArgs(process.argv.slice(2));
+  if (jsonFlag(args)) {
+    process.stdout.write(`${JSON.stringify({ ok: false, error: message }, null, 2)}\n`);
+  } else {
+    process.stderr.write(`${message}\n`);
+  }
   process.exitCode = 1;
 });
