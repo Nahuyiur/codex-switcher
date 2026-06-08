@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFile as execFileCallback } from "node:child_process";
+import { execFile as execFileCallback, spawn } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -12,6 +12,7 @@ import { updateTopLevelToml } from "../src/codexConfig";
 import { findCodexAppServerPids } from "../src/appServerRestart";
 import { SWITCHER_VERSION } from "../src/appServerClient";
 import { runSwitchAccountSlashCommand, stripCommandName } from "../src/slashCommand";
+import { renderInteractiveDashboard } from "../src/interactiveCli";
 
 test("auth parsing rejects malformed auth files", () => {
   assert.throws(() => parseAuthJson("{"), /不是合法 JSON/);
@@ -74,6 +75,18 @@ test("best account uses bottleneck balance", () => {
   ];
   assert.equal(scoreAccount(accounts[0]), 10);
   assert.equal(pickBestAccount(accounts)?.id, "b");
+});
+
+test("interactive dashboard renders balances and actions", () => {
+  const active = { ...account("muka1", 84, 43), active: true, windows: account("muka1", 84, 43).windows || [] };
+  const expired = { ...account("muka2", 0, 0), active: false, windows: account("muka2", 0, 0).windows || [], error: "token expired" };
+  const output = renderInteractiveDashboard([active, expired]);
+
+  assert.match(output, /Codex 账号切换器/);
+  assert.match(output, /muka1/);
+  assert.match(output, /84%/);
+  assert.match(output, /编号或账号标签/);
+  assert.match(output, /token expired/);
 });
 
 test("codex config updates managed top-level keys only", () => {
@@ -228,6 +241,23 @@ test("CLI accepts positional labels and label selectors", async () => {
   const refreshed = await runCli([...baseArgs, "refresh-limits", "alpha", "--json"], root);
   const accounts = JSON.parse(refreshed);
   assert.equal(accounts.find((account: StoredAccount) => account.label === "alpha label")?.error?.length > 0, true);
+});
+
+test("CLI ui renders menu and exits from stdin", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-switcher-cli-ui-test-"));
+  const codexHome = path.join(root, "codex");
+  const store = path.join(root, "store");
+  await fs.mkdir(codexHome, { recursive: true });
+  const authPath = path.join(root, "alpha.auth.json");
+  await fs.writeFile(authPath, JSON.stringify({ tokens: { access_token: "a", refresh_token: "ra", account_id: "alpha" } }), "utf8");
+
+  const baseArgs = ["--codex-home", codexHome, "--store", store, "--codex-cli", "/missing/codex"];
+  await runCli([...baseArgs, "import", authPath, "alpha", "--json"], root);
+  const output = await runCli([...baseArgs, "ui"], root, "q\n");
+
+  assert.match(output, /Codex 账号切换器/);
+  assert.match(output, /alpha/);
+  assert.match(output, /b 自动切到瓶颈余额最高/);
 });
 
 test("switch keeps token-only account active after access token refresh", async () => {
@@ -635,20 +665,39 @@ process.stdin.on("data", (chunk) => {
 `;
 }
 
-async function runCli(args: string[], cwd = path.resolve(".")): Promise<string> {
-  const result = await runCliProcess(args, cwd);
+async function runCli(args: string[], cwd = path.resolve("."), input?: string): Promise<string> {
+  const result = await runCliProcess(args, cwd, input);
   if (result.code !== 0) {
     throw new Error([`exit ${result.code}`, result.stdout, result.stderr].filter(Boolean).join("\n"));
   }
   return result.stdout;
 }
 
-function runCliProcess(args: string[], cwd = path.resolve(".")): Promise<{ code: number; stdout: string; stderr: string }> {
+function runCliProcess(args: string[], cwd = path.resolve("."), input?: string): Promise<{ code: number; stdout: string; stderr: string }> {
   const cli = path.resolve("dist/src/cli.js");
+  const env = { ...process.env, CODEX_HOME: undefined, CODEX_ACCOUNT_SWITCHER_HOME: undefined };
+  if (input !== undefined) {
+    return new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, [cli, ...args], { cwd, env, stdio: "pipe" });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString("utf8");
+      });
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString("utf8");
+      });
+      child.on("error", reject);
+      child.on("close", (code) => {
+        resolve({ code: code ?? 1, stdout: stdout.trim(), stderr: stderr.trim() });
+      });
+      child.stdin.end(input);
+    });
+  }
   return new Promise((resolve) => {
     execFileCallback(process.execPath, [cli, ...args], {
       cwd,
-      env: { ...process.env, CODEX_HOME: undefined, CODEX_ACCOUNT_SWITCHER_HOME: undefined },
+      env,
     }, (error, stdout, stderr) => {
       resolve({
         code: typeof (error as NodeJS.ErrnoException | null)?.code === "number" ? Number((error as NodeJS.ErrnoException).code) : error ? 1 : 0,

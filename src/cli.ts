@@ -2,6 +2,7 @@
 import { AccountSwitcher } from "./manager";
 import { formatWindow, scoreAccount } from "./rateLimits";
 import { sanitizeError } from "./auth";
+import { runInteractiveCli } from "./interactiveCli";
 import { runSwitchAccountSlashCommand } from "./slashCommand";
 import {
   describeSettings,
@@ -64,6 +65,12 @@ async function main(): Promise<void> {
     case "list": {
       const accounts = await switcher.list();
       output(args, accounts, renderList(accounts));
+      return;
+    }
+    case "ui":
+    case "menu":
+    case "interactive": {
+      await runInteractiveCli(switcher);
       return;
     }
     case "refresh-limits": {
@@ -441,6 +448,10 @@ ${HELP_EXAMPLES.map((example) => `  ${example}`).join("\n")}
 
 开发者说明:
   底层 CLI 仍支持脚本调用和 JSON 输出，但面向用户的复制命令统一使用 /switch-account ...。
+
+CLI 交互界面:
+  codex-account-switcher ui      打开账号余额和切换菜单
+  菜单内输入编号或账号标签切换，输入 b 自动切最佳账号，输入 r 刷新余额
 
 通用参数:
   --codex-home <path>   指定目标 CODEX_HOME，支持 ~ 和相对路径

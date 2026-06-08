@@ -33,6 +33,7 @@
 | --- | --- | --- |
 | **Codex App 插件** | 你主要在 Codex App 里使用 | 直接发 `/switch-account list`、`/switch-account switch muka2`，也支持中文自然语言。 |
 | **VS Code 扩展** | 本机 VS Code 或 Remote SSH | Activity Bar 侧栏、状态栏、账号列表、余额条和默认配置面板。 |
+| **CLI 交互界面** | 你在 zsh/bash 里直接用 Codex | `codex-account-switcher ui` 打开编号菜单，看余额、刷新、按编号切换或自动切最佳账号。 |
 | **自动化能力** | 脚本、调试、插件内部调用 | 仍然复用同一套 `/switch-account ...` 解析器，普通用户不需要记底层二进制前缀。 |
 
 工具只操作当前机器上的 Codex 配置。VS Code Remote SSH 中使用时，扩展运行在远程 extension host，因此修改的是远程服务器的 `~/.codex/auth.json` 和 `~/.codex/config.toml`，不会自动同步本机账号。
@@ -303,6 +304,26 @@ npm run package:vsix
 - 可选开启切换后自动刷新 app-server 运行态。
 
 Remote SSH 使用时，VS Code 扩展运行在远程服务器上，所以文件选择、账号库、`~/.codex/auth.json` 和 `~/.codex/config.toml` 都属于远程服务器。
+
+## CLI 交互界面
+
+如果你在终端里直接运行 `codex`，可以先用交互菜单选账号：
+
+```bash
+codex-account-switcher ui
+```
+
+菜单会显示当前账号、5 小时余额、7 天余额、瓶颈余额和余额读取错误。可用操作：
+
+| 输入 | 作用 |
+| --- | --- |
+| `1`、`2`、`3` | 按编号切换到对应账号。 |
+| `muka3` | 按账号标签切换。 |
+| `b` | 刷新余额并自动切换到瓶颈余额最高的账号。 |
+| `r` | 刷新所有账号余额。 |
+| `q` | 退出菜单。 |
+
+切换后建议重新打开一个 Codex 会话，或者退出当前 `codex` 后重新进入。
 
 ## 自动化和调试
 
