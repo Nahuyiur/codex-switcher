@@ -2,7 +2,7 @@
   "name": "codex-account-switcher",
   "displayName": "Codex 账号切换器",
   "description": "在本机或 VS Code Remote 中保存、导入、查看余额并快速切换 Codex 账号。",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "Nahuyiur",
   "license": "MIT",
   "repository": {
@@ -23,9 +23,11 @@
     "vscode": "^1.90.0"
   },
   "extensionKind": [
-    "workspace"
+    "workspace",
+    "ui"
   ],
   "activationEvents": [
+    "onStartupFinished",
     "onView:codexAccountSwitcher.accountsView",
     "onCommand:codexAccountSwitcher.refresh",
     "onCommand:codexAccountSwitcher.addCurrent",
@@ -46,7 +48,8 @@
       "codexAccountSwitcher": [
         {
           "id": "codexAccountSwitcher.accountsView",
-          "name": "账号切换"
+          "name": "账号切换",
+          "type": "webview"
         }
       ]
     },

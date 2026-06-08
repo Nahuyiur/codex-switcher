@@ -275,13 +275,13 @@ UI、日志和错误信息不会显示 token。账号快照文件本身仍然是
 仓库根目录已经放了可直接安装的 VSIX 包：
 
 ```text
-codex-account-switcher-0.1.0.vsix
+codex-account-switcher-0.1.1.vsix
 ```
 
 安装方式：
 
 - VS Code 里打开 Extensions 面板，选择 “Install from VSIX...”，然后选中这个文件。
-- 或者在终端里运行 `code --install-extension codex-account-switcher-0.1.0.vsix`。
+- 或者在终端里运行 `code --install-extension codex-account-switcher-0.1.1.vsix`。
 
 开发者需要重新打包时再运行：
 
