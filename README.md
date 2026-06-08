@@ -327,7 +327,7 @@ codex-account-switcher ui
 
 ## 自动化和调试
 
-普通使用时不要加任何底层二进制前缀，所有面向人的账号切换命令都写成 `/switch-account ...`。例如：
+在 Codex App 对话里不要加任何底层二进制前缀，所有面向人的对话命令都写成 `/switch-account ...`。例如：
 
 ```text
 /switch-account 保存当前 主账号
@@ -348,7 +348,7 @@ codex-account-switcher ui
 /switch-account help
 ```
 
-开发者如果要做脚本集成，可以调用项目底层 CLI，但 README 不再把底层二进制前缀作为用户命令展示，避免在 Codex App 对话里复制错入口。脚本可用的选项和 slash 写法共用同一套解析逻辑：
+开发者如果要做脚本集成，可以调用项目底层 CLI；终端里的交互入口使用上一节的 `codex-account-switcher ui`。脚本可用的选项和 slash 写法共用同一套解析逻辑：
 
 | 参数 | 说明 |
 | --- | --- |

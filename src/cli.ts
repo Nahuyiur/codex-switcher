@@ -447,7 +447,7 @@ function helpText(): string {
 ${HELP_EXAMPLES.map((example) => `  ${example}`).join("\n")}
 
 开发者说明:
-  底层 CLI 仍支持脚本调用和 JSON 输出，但面向用户的复制命令统一使用 /switch-account ...。
+  Codex App 对话里统一复制 /switch-account ...；终端里可使用下面的 CLI 交互界面或脚本参数。
 
 CLI 交互界面:
   codex-account-switcher ui      打开账号余额和切换菜单
